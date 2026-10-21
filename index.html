@@ -43,6 +43,76 @@
       { name: '沖縄県 (那覇)', code: '471000' }
     ];
 
+    // 簡易的な日本の国民の祝日判定 (土日祝判定用)
+    function isJapaneseHoliday(year, month, day) {
+      const dateStr = `${month}/${day}`;
+      // 固定祝日（月/日）
+      const fixedHolidays = [
+        '1/1', '1/2', '1/3', '2/11', '2/23', '4/29', '5/3', '5/4', '5/5', '8/11', '11/3', '11/23'
+      ];
+      if (fixedHolidays.includes(dateStr)) return true;
+
+      // 春分・秋分の日の目安
+      if (month === 3 && (day === 20 || day === 21)) return true;
+      if (month === 9 && (day === 22 || day === 23)) return true;
+
+      // 成人の日 (1月第2月曜), 敬老の日 (9月第3月曜), 体育/スポーツの日 (10月第2月曜)
+      const d = new Date(year, month - 1, day);
+      const dayOfWeek = d.getDay(); // 1 = 月曜日
+      if (dayOfWeek === 1) {
+        const weekNum = Math.ceil(day / 7);
+        if (month === 1 && weekNum === 2) return true;
+        if (month === 9 && weekNum === 3) return true;
+        if (month === 10 && weekNum === 2) return true;
+      }
+
+      return false;
+    }
+
+    function isNonWorkingDay(year, month, day) {
+      const d = new Date(year, month - 1, day);
+      const dayOfWeek = d.getDay();
+      if (dayOfWeek === 0 || dayOfWeek === 6) return true; // 土日
+      return isJapaneseHoliday(year, month, day);
+    }
+
+    // 補正計算された給料日を求める関数
+    function getAdjustedPaydayDateStr(year, month, targetDayNum, adjustmentType) {
+      let targetDate = new Date(year, month - 1, parseInt(targetDayNum, 10));
+      // 月末補正 (例: 31日がない月)
+      if (targetDate.getMonth() !== month - 1) {
+        targetDate = new Date(year, month, 0); // 該当月の末日
+      }
+
+      let y = targetDate.getFullYear();
+      let m = targetDate.getMonth() + 1;
+      let d = targetDate.getDate();
+
+      if (adjustmentType === 'none') {
+        return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      }
+
+      if (adjustmentType === 'prev') {
+        // 前倒し（直前の平日）
+        while (isNonWorkingDay(y, m, d)) {
+          targetDate.setDate(targetDate.getDate() - 1);
+          y = targetDate.getFullYear();
+          m = targetDate.getMonth() + 1;
+          d = targetDate.getDate();
+        }
+      } else if (adjustmentType === 'next') {
+        // 後送り（直後の平日）
+        while (isNonWorkingDay(y, m, d)) {
+          targetDate.setDate(targetDate.getDate() + 1);
+          y = targetDate.getFullYear();
+          m = targetDate.getMonth() + 1;
+          d = targetDate.getDate();
+        }
+      }
+
+      return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    }
+
     function App() {
       // 認証関連
       const [authMode, setAuthMode] = useState('login'); 
@@ -62,10 +132,11 @@
       const [memos, setMemos] = useState([]); 
       const [tags, setTags] = useState([]);
 
-      // 新機能: 予定イベント・給料日・休日設定データ
-      const [events, setEvents] = useState([]); // [{ id, title, date, category: 'birthday'|'live'|'event'|'travel' }]
+      // 予定イベント・給料日・休日設定データ
+      const [events, setEvents] = useState([]); // [{ id, title, date, icon }]
       const [payday, setPayday] = useState('25'); // 毎月の給料日 (1〜31)
-      const [holidays, setHolidays] = useState([]); // [{ id, memberName, date, color }]
+      const [paydayAdjustment, setPaydayAdjustment] = useState('prev'); // 'prev' (前倒し) | 'next' (後送り) | 'none'
+      const [holidays, setHolidays] = useState([]); // [{ id, memberName, date }]
       const [memberNames, setMemberNames] = useState(['自分', '家族']);
 
       // 地域設定
@@ -83,12 +154,12 @@
       const [isNewListModalOpen, setIsNewListModalOpen] = useState(false);
       const [isSettingsOpen, setIsSettingsOpen] = useState(false);
       const [isTrashOpen, setIsTrashOpen] = useState(false);
-      const [isEventModalOpen, setIsEventModalOpen] = useState(false); // イベント・休日作成用
+      const [isEventModalOpen, setIsEventModalOpen] = useState(false);
 
       // 一括操作用
       const [selectedTodoIds, setSelectedTodoIds] = useState([]);
 
-      // 入力 State (クイックメモ)
+      // 入力 State
       const [newQuickMemo, setNewQuickMemo] = useState('');
 
       // Form State (Todo)
@@ -109,7 +180,7 @@
       // Form State (Event & Holiday)
       const [eventFormType, setEventFormType] = useState('event'); // 'event' | 'holiday'
       const [eventTitle, setEventTitle] = useState('');
-      const [eventCategory, setEventCategory] = useState('event'); // 'event' | 'birthday' | 'live' | 'travel'
+      const [eventIcon, setEventIcon] = useState('🎉'); // カスタムアイコン
       const [eventDate, setEventDate] = useState(new Date().toISOString().split('T')[0]);
       const [holidayMember, setHolidayMember] = useState('自分');
       const [newMemberInput, setNewMemberInput] = useState('');
@@ -168,9 +239,9 @@
           setTags(data.tags || []);
           setLocationCode(data.locationCode || '230000');
 
-          // 新機能データのロード
           setEvents(data.events || []);
           setPayday(data.payday || '25');
+          setPaydayAdjustment(data.paydayAdjustment || 'prev');
           setHolidays(data.holidays || []);
           setMemberNames(data.memberNames || ['自分', '家族']);
         } else {
@@ -183,6 +254,7 @@
           setLocationCode('230000');
           setEvents([]);
           setPayday('25');
+          setPaydayAdjustment('prev');
           setHolidays([]);
           setMemberNames(['自分', '家族']);
         }
@@ -193,7 +265,7 @@
 
       const saveUserData = (
         updatedTodos, updatedLists, updatedTags, updatedLocation, updatedSelectedListId, updatedMemos, updatedTrash,
-        updatedEvents, updatedPayday, updatedHolidays, updatedMembers
+        updatedEvents, updatedPayday, updatedHolidays, updatedMembers, updatedPaydayAdj
       ) => {
         if (!userId) return;
         const dataToSave = {
@@ -206,6 +278,7 @@
           locationCode: updatedLocation !== undefined ? updatedLocation : locationCode,
           events: updatedEvents !== undefined ? updatedEvents : events,
           payday: updatedPayday !== undefined ? updatedPayday : payday,
+          paydayAdjustment: updatedPaydayAdj !== undefined ? updatedPaydayAdj : paydayAdjustment,
           holidays: updatedHolidays !== undefined ? updatedHolidays : holidays,
           memberNames: updatedMembers !== undefined ? updatedMembers : memberNames
         };
@@ -241,7 +314,7 @@
         localStorage.removeItem('app_active_user');
       };
 
-      // ToDo追加/編集
+      // ToDo保存
       const handleSaveTodo = (e) => {
         e.preventDefault();
         if (!formTitle.trim()) return;
@@ -293,7 +366,7 @@
             id: Date.now().toString(),
             title: eventTitle.trim(),
             date: eventDate,
-            category: eventCategory
+            icon: eventIcon || '🎉'
           };
           const nextEvents = [...events, newEv];
           setEvents(nextEvents);
@@ -321,7 +394,7 @@
       const deleteHoliday = (id) => {
         const nextHolidays = holidays.filter(h => h.id !== id);
         setHolidays(nextHolidays);
-        saveUserData(undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, nextHolidays);
+        saveUserData(undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, nextHolidays);
       };
 
       const handleAddMember = () => {
@@ -329,7 +402,7 @@
           const nextMembers = [...memberNames, newMemberInput.trim()];
           setMemberNames(nextMembers);
           setHolidayMember(newMemberInput.trim());
-          saveUserData(undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, nextMembers);
+          saveUserData(undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, nextMembers);
           setNewMemberInput('');
         }
       };
@@ -536,15 +609,21 @@
         saveUserData(undefined, undefined, undefined, code);
       };
 
-      const handleSavePayday = (pd) => {
+      const handleSavePayday = (pd, adj) => {
         setPayday(pd);
-        saveUserData(undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, pd);
+        setPaydayAdjustment(adj);
+        saveUserData(undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, pd, undefined, undefined, adj);
       };
 
       // 日付関連計算
       const todayObj = new Date();
       const todayStr = todayObj.toISOString().split('T')[0];
-      const todayDayNum = todayObj.getDate().toString();
+
+      // 今月の補正給料日判定
+      const currentYear = todayObj.getFullYear();
+      const currentMonth = todayObj.getMonth() + 1;
+      const calculatedPaydayStr = getAdjustedPaydayDateStr(currentYear, currentMonth, payday, paydayAdjustment);
+      const isTodayPayday = calculatedPaydayStr === todayStr;
 
       // フィルター＆ソート
       const currentListTodos = todos.filter(t => t.listId === selectedListId);
@@ -582,14 +661,13 @@
       const todayMemos = memos.filter(m => !m.date || m.date === todayStr);
       const todayEvents = events.filter(e => e.date === todayStr);
       const todayHolidays = holidays.filter(h => h.date === todayStr);
-      const isTodayPayday = todayDayNum === payday;
 
       const overdueTodos = currentListTodos.filter(t => t.hasDate !== false && t.endDate < todayStr && !t.completed);
 
       const dayOfWeekStr = ['日', '月', '火', '水', '木', '金', '土'][todayObj.getDay()];
       const formattedToday = `${todayObj.getMonth() + 1}月${todayObj.getDate()}日 (${dayOfWeekStr})`;
 
-      // カレンダー
+      // カレンダー計算
       const year = currentDate.getFullYear();
       const month = currentDate.getMonth();
       const firstDayOfMonth = new Date(year, month, 1).getDay();
@@ -602,15 +680,8 @@
         calendarDays.push({ day: i, dateStr });
       }
 
-      // カテゴリアイコン
-      const getEventCategoryIcon = (cat) => {
-        switch (cat) {
-          case 'birthday': return '🎂';
-          case 'live': return '🎤';
-          case 'travel': return '✈️';
-          case 'event': default: return '🎉';
-        }
-      };
+      // 当月の補正給料日
+      const calPaydayStr = getAdjustedPaydayDateStr(year, month + 1, payday, paydayAdjustment);
 
       // 未ログイン画面
       if (!isLoggedIn) {
@@ -799,13 +870,13 @@
                   {(todayEvents.length > 0 || todayHolidays.length > 0 || isTodayPayday) && (
                     <div className="pt-2 border-t border-slate-100 flex flex-wrap gap-1.5">
                       {isTodayPayday && (
-                        <span className="bg-emerald-100 text-emerald-800 font-extrabold text-[10px] px-2 py-0.5 rounded-lg flex items-center gap-1">
+                        <span className="bg-emerald-100 text-emerald-800 font-extrabold text-[10px] px-2 py-0.5 rounded-lg flex items-center gap-1 shadow-2xs">
                           💰 本日は給料日です！
                         </span>
                       )}
                       {todayEvents.map(ev => (
                         <span key={ev.id} className="bg-purple-100 text-purple-800 font-bold text-[10px] px-2 py-0.5 rounded-lg flex items-center gap-1">
-                          {getEventCategoryIcon(ev.category)} {ev.title}
+                          {ev.icon || '🎉'} {ev.title}
                           <button onClick={() => deleteEvent(ev.id)} className="hover:text-rose-600 ml-1">×</button>
                         </span>
                       ))}
@@ -1176,7 +1247,7 @@
             )}
           </main>
 
-          {/* カレンダーモーダル (イベント・休日・給料日表示) */}
+          {/* カレンダーモーダル */}
           {isCalendarOpen && (
             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 z-50">
               <div className="bg-white rounded-2xl w-full max-w-md p-4 shadow-2xl border border-slate-100">
@@ -1208,7 +1279,7 @@
                     const dayMemoCount = memos.filter(m => m.date === item.dateStr).length;
                     const dayEvs = events.filter(e => e.date === item.dateStr);
                     const dayHols = holidays.filter(h => h.date === item.dateStr);
-                    const isPay = item.day.toString() === payday;
+                    const isPay = calPaydayStr === item.dateStr;
 
                     return (
                       <div
@@ -1224,21 +1295,18 @@
                         </div>
 
                         <div className="space-y-0.5 overflow-y-auto">
-                          {/* 休日バッジ */}
                           {dayHols.map(hol => (
                             <div key={hol.id} className="text-[8px] px-1 bg-amber-200 text-amber-900 rounded font-bold truncate">
                               🏖️ {hol.memberName}休
                             </div>
                           ))}
 
-                          {/* イベントバッジ */}
                           {dayEvs.map(ev => (
                             <div key={ev.id} className="text-[8px] px-1 bg-purple-100 text-purple-800 rounded font-bold truncate">
-                              {getEventCategoryIcon(ev.category)} {ev.title}
+                              {ev.icon || '🎉'} {ev.title}
                             </div>
                           ))}
 
-                          {/* ToDoバッジ */}
                           {dayTodos.map(todo => (
                             <div
                               key={todo.id}
@@ -1267,20 +1335,19 @@
             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 z-50">
               <div className="bg-white rounded-2xl w-full max-w-sm p-4 shadow-2xl border border-slate-100 space-y-3">
                 <div className="flex items-center justify-between border-b pb-2">
-                  <h2 className="text-xs font-bold text-slate-800">🎉 イベント・休日設定</h2>
+                  <h2 className="text-xs font-bold text-slate-800">🎉 予定・休日設定</h2>
                   <button onClick={() => setIsEventModalOpen(false)} className="text-slate-400 p-0.5">
                     <i data-lucide="x" className="w-4 h-4"></i>
                   </button>
                 </div>
 
-                {/* タイプ切替 */}
                 <div className="flex bg-slate-100 p-1 rounded-xl font-bold">
                   <button
                     type="button"
                     onClick={() => setEventFormType('event')}
                     className={`flex-1 py-1 rounded-lg transition ${eventFormType === 'event' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-500'}`}
                   >
-                    特別イベント (ライブ/誕生日)
+                    特別イベント (予定)
                   </button>
                   <button
                     type="button"
@@ -1306,17 +1373,28 @@
                   {eventFormType === 'event' ? (
                     <>
                       <div>
-                        <label className="block text-[9px] font-bold text-slate-400 mb-0.5">カテゴリ</label>
-                        <select
-                          value={eventCategory}
-                          onChange={(e) => setEventCategory(e.target.value)}
-                          className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-base bg-white font-bold"
-                        >
-                          <option value="event">🎉 イベント / 記念日</option>
-                          <option value="birthday">🎂 誕生日</option>
-                          <option value="live">🎤 ライブ / コンサート</option>
-                          <option value="travel">✈️ 旅行 / 出張</option>
-                        </select>
+                        <label className="block text-[9px] font-bold text-slate-400 mb-0.5">アイコン絵文字（自由設定）</label>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            maxLength="2"
+                            value={eventIcon}
+                            onChange={(e) => setEventIcon(e.target.value)}
+                            className="w-12 text-center py-1 border border-slate-200 rounded-lg text-lg font-bold"
+                          />
+                          <div className="flex gap-1">
+                            {['🎉', '🎂', '🎤', '✈️', '🚗', '💍', '🏀'].map(emoji => (
+                              <button
+                                type="button"
+                                key={emoji}
+                                onClick={() => setEventIcon(emoji)}
+                                className="px-1.5 py-0.5 bg-slate-100 rounded text-sm hover:bg-slate-200"
+                              >
+                                {emoji}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
                       </div>
 
                       <div>
@@ -1326,7 +1404,7 @@
                           value={eventTitle}
                           onChange={(e) => setEventTitle(e.target.value)}
                           className="w-full px-3 py-2 border border-slate-200 rounded-lg text-base outline-none font-bold"
-                          placeholder="例: ○○ライブ、家族で旅行..."
+                          placeholder="例: ○○ライブ、誕生日..."
                           required
                         />
                       </div>
@@ -1411,7 +1489,6 @@
                     placeholder="詳細メモ..."
                   />
 
-                  {/* 期間指定 */}
                   <div className="bg-slate-50 p-2 rounded-xl border border-slate-200/60 space-y-2">
                     <div className="flex items-center justify-between">
                       <label className="text-[10px] font-bold text-slate-600">期間（期限）を設定する</label>
@@ -1446,7 +1523,6 @@
                     )}
                   </div>
 
-                  {/* 時間指定 */}
                   <div className="bg-slate-50 p-2 rounded-xl border border-slate-200/60 space-y-2">
                     <div className="flex items-center justify-between">
                       <label className="text-[10px] font-bold text-slate-600">時間を指定する</label>
@@ -1559,20 +1635,33 @@
                   </select>
                 </div>
 
-                {/* 給料日の設定 */}
-                <div className="space-y-1.5">
-                  <label className="block text-[10px] font-bold text-slate-500">毎月の給料日の設定</label>
+                {/* 給料日 ＆ 土日祝日補正の設定 */}
+                <div className="space-y-2 pt-2 border-t border-slate-100">
+                  <label className="block text-[10px] font-bold text-slate-500">毎月の給料日 & 休日の補正設定</label>
                   <div className="flex items-center gap-1">
-                    <span className="text-xs">毎月</span>
+                    <span className="text-xs font-bold">毎月</span>
                     <input
                       type="number"
                       min="1"
                       max="31"
                       value={payday}
-                      onChange={(e) => handleSavePayday(e.target.value)}
-                      className="w-16 px-2 py-1 border border-slate-200 rounded-lg text-xs font-bold outline-none"
+                      onChange={(e) => handleSavePayday(e.target.value, paydayAdjustment)}
+                      className="w-14 px-2 py-1 border border-slate-200 rounded-lg text-xs font-bold outline-none"
                     />
-                    <span className="text-xs">日</span>
+                    <span className="text-xs font-bold">日</span>
+                  </div>
+
+                  <div className="space-y-1 pt-1">
+                    <label className="block text-[9px] font-bold text-slate-400">土日・祝日の場合</label>
+                    <select
+                      value={paydayAdjustment}
+                      onChange={(e) => handleSavePayday(payday, e.target.value)}
+                      className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-xs bg-white font-bold outline-none"
+                    >
+                      <option value="prev">⏪ 前倒し (直前の平日に変更)</option>
+                      <option value="next">⏩ 後送り (直後の平日に変更)</option>
+                      <option value="none">そのまま (日付通り)</option>
+                    </select>
                   </div>
                 </div>
 
