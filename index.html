@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
   <title>ToDo & カレンダー App</title>
   
   <!-- Tailwind CSS (CDN) -->
@@ -58,35 +58,43 @@
       const [lists, setLists] = useState([]);
       const [selectedListId, setSelectedListId] = useState('');
       const [todos, setTodos] = useState([]);
+      const [trash, setTrash] = useState([]); // ゴミ箱 [{ ...todo, deletedAt }]
       const [memos, setMemos] = useState([]); 
       const [tags, setTags] = useState([]);
 
       // 地域設定
       const [locationCode, setLocationCode] = useState('230000');
 
-      // 検索・フィルター
+      // 検索・フィルター・ソート
       const [searchQuery, setSearchQuery] = useState('');
       const [selectedTagFilter, setSelectedTagFilter] = useState('すべて');
+      const [selectedDateFilter, setSelectedDateFilter] = useState('すべて'); // 'すべて' | 'today' | 'this_week' | 'no_date'
+      const [sortBy, setSortBy] = useState('created'); // 'created' | 'essential' | 'date'
 
       // モーダル管理
       const [isCalendarOpen, setIsCalendarOpen] = useState(false);
       const [isModalOpen, setIsModalOpen] = useState(false);
       const [isNewListModalOpen, setIsNewListModalOpen] = useState(false);
       const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+      const [isTrashOpen, setIsTrashOpen] = useState(false); // ゴミ箱モーダル
 
-      // 新規入力用 State
+      // 一括操作用（選択されたTodo ID）
+      const [selectedTodoIds, setSelectedTodoIds] = useState([]);
+
+      // 入力用 State
       const [newQuickMemo, setNewQuickMemo] = useState('');
 
       // Form State (Todo)
       const [editingTodo, setEditingTodo] = useState(null);
       const [formTitle, setFormTitle] = useState('');
       const [formDetail, setFormDetail] = useState('');
-      const [formHasDate, setFormHasDate] = useState(true); // 期間（期限）の有無
+      const [formHasDate, setFormHasDate] = useState(true);
       const [formStartDate, setFormStartDate] = useState(new Date().toISOString().split('T')[0]);
       const [formEndDate, setFormEndDate] = useState(new Date().toISOString().split('T')[0]);
-      const [formHasTime, setFormHasTime] = useState(false); // 時間の有無
+      const [formHasTime, setFormHasTime] = useState(false);
       const [formTime, setFormTime] = useState('09:00');
       const [formIsEssential, setFormIsEssential] = useState(false); 
+      const [formIsLocked, setFormIsLocked] = useState(false); 
       const [formTags, setFormTags] = useState([]);
       const [newTagInput, setNewTagInput] = useState('');
       const [newListName, setNewListName] = useState('');
@@ -136,6 +144,12 @@
           setLists(data.lists || []);
           setSelectedListId(data.selectedListId || (data.lists && data.lists[0]?.id) || '');
           setTodos(data.todos || []);
+          
+          // ゴミ箱データの24時間自動クリーンアップ
+          const now = Date.now();
+          const validTrash = (data.trash || []).filter(item => (now - item.deletedAt) < 24 * 60 * 60 * 1000);
+          setTrash(validTrash);
+
           setMemos(data.memos || []);
           setTags(data.tags || []);
           setLocationCode(data.locationCode || '230000');
@@ -143,6 +157,7 @@
           setLists([]);
           setSelectedListId('');
           setTodos([]);
+          setTrash([]);
           setMemos([]);
           setTags([]);
           setLocationCode('230000');
@@ -152,12 +167,13 @@
         localStorage.setItem('app_active_user', id);
       };
 
-      const saveUserData = (updatedTodos, updatedLists, updatedTags, updatedLocation, updatedSelectedListId, updatedMemos) => {
+      const saveUserData = (updatedTodos, updatedLists, updatedTags, updatedLocation, updatedSelectedListId, updatedMemos, updatedTrash) => {
         if (!userId) return;
         const dataToSave = {
           lists: updatedLists !== undefined ? updatedLists : lists,
           selectedListId: updatedSelectedListId !== undefined ? updatedSelectedListId : selectedListId,
           todos: updatedTodos !== undefined ? updatedTodos : todos,
+          trash: updatedTrash !== undefined ? updatedTrash : trash,
           memos: updatedMemos !== undefined ? updatedMemos : memos,
           tags: updatedTags !== undefined ? updatedTags : tags,
           locationCode: updatedLocation !== undefined ? updatedLocation : locationCode
@@ -211,6 +227,7 @@
             hasTime: formHasTime,
             time: formHasTime ? formTime : '',
             isEssential: formIsEssential,
+            isLocked: formIsLocked,
             tags: formTags,
           } : t);
         } else {
@@ -225,6 +242,7 @@
             hasTime: formHasTime,
             time: formHasTime ? formTime : '',
             isEssential: formIsEssential,
+            isLocked: formIsLocked,
             tags: formTags,
             completed: false,
           };
@@ -235,7 +253,86 @@
         closeModal();
       };
 
-      // 覚え書きメモ追加
+      // ゴミ箱へ移動（論理削除）
+      const deleteTodo = (id) => {
+        const target = todos.find(t => t.id === id);
+        if (!target) return;
+
+        if (target.isLocked) {
+          alert('🔒 ロックされているため削除できません。編集画面からロックを解除してください。');
+          return;
+        }
+
+        const nextTodos = todos.filter(t => t.id !== id);
+        const nextTrash = [{ ...target, deletedAt: Date.now() }, ...trash];
+        
+        setTodos(nextTodos);
+        setTrash(nextTrash);
+        saveUserData(nextTodos, undefined, undefined, undefined, undefined, undefined, nextTrash);
+        if (editingTodo && editingTodo.id === id) closeModal();
+      };
+
+      // ゴミ箱からの復元
+      const restoreFromTrash = (id) => {
+        const target = trash.find(t => t.id === id);
+        if (!target) return;
+
+        const { deletedAt, ...todoData } = target;
+        const nextTrash = trash.filter(t => t.id !== id);
+        const nextTodos = [...todos, todoData];
+
+        setTodos(nextTodos);
+        setTrash(nextTrash);
+        saveUserData(nextTodos, undefined, undefined, undefined, undefined, undefined, nextTrash);
+      };
+
+      // ゴミ箱からの完全削除
+      const permanentlyDeleteFromTrash = (id) => {
+        const nextTrash = trash.filter(t => t.id !== id);
+        setTrash(nextTrash);
+        saveUserData(undefined, undefined, undefined, undefined, undefined, undefined, nextTrash);
+      };
+
+      // 選択したチェックボックス項目を一括削除（ロック済みは除外）
+      const handleBulkDelete = () => {
+        if (selectedTodoIds.length === 0) return;
+
+        const targets = todos.filter(t => selectedTodoIds.includes(t.id));
+        const lockedTargets = targets.filter(t => t.isLocked);
+
+        if (lockedTargets.length > 0) {
+          alert(`選択した項目のうち ${lockedTargets.length} 件は🔒ロックされているため削除対象から除外されます。`);
+        }
+
+        const deletableTargets = targets.filter(t => !t.isLocked);
+        if (deletableTargets.length === 0) return;
+
+        const deletableIds = deletableTargets.map(t => t.id);
+        const nextTodos = todos.filter(t => !deletableIds.includes(t.id));
+        const newTrashItems = deletableTargets.map(t => ({ ...t, deletedAt: Date.now() }));
+        const nextTrash = [...newTrashItems, ...trash];
+
+        setTodos(nextTodos);
+        setTrash(nextTrash);
+        setSelectedTodoIds([]);
+        saveUserData(nextTodos, undefined, undefined, undefined, undefined, undefined, nextTrash);
+      };
+
+      const toggleTodoSelect = (id) => {
+        if (selectedTodoIds.includes(id)) {
+          setSelectedTodoIds(selectedTodoIds.filter(i => i !== id));
+        } else {
+          setSelectedTodoIds([...selectedTodoIds, id]);
+        }
+      };
+
+      const toggleLockTodo = (id) => {
+        const nextTodos = todos.map(t => t.id === id ? { ...t, isLocked: !t.isLocked } : t);
+        setTodos(nextTodos);
+        saveUserData(nextTodos);
+      };
+
+      // 覚え書きメモ機能
       const handleAddMemo = (targetDate = null) => {
         if (!newQuickMemo.trim()) return;
         const newMemoItem = {
@@ -262,14 +359,12 @@
         saveUserData(undefined, undefined, undefined, undefined, undefined, nextMemos);
       };
 
-      // 💡 覚え書きメモを「カレンダー（ToDo）」に昇格させる仕組み
       const promoteMemoToTodo = (memo) => {
         if (!selectedListId && lists.length === 0) {
           alert('最初にリストを作成してください。');
           setIsNewListModalOpen(true);
           return;
         }
-        // メモを削除して、新規ToDo作成モーダルを開く（テキストをタイトルにセット）
         deleteMemo(memo.id);
         
         setEditingTodo(null);
@@ -282,6 +377,7 @@
         setFormHasTime(false);
         setFormTime('09:00');
         setFormIsEssential(false);
+        setFormIsLocked(false);
         setFormTags([]);
         setIsModalOpen(true);
       };
@@ -307,6 +403,7 @@
         setFormHasTime(false);
         setFormTime('09:00');
         setFormIsEssential(false);
+        setFormIsLocked(false);
         setFormTags([]);
         setIsModalOpen(true);
       };
@@ -325,6 +422,7 @@
         setFormHasTime(!!todo.hasTime);
         setFormTime(todo.time || '09:00');
         setFormIsEssential(!!todo.isEssential);
+        setFormIsLocked(!!todo.isLocked);
         setFormTags(todo.tags || []);
         setIsModalOpen(true);
       };
@@ -332,13 +430,6 @@
       const closeModal = () => {
         setIsModalOpen(false);
         setEditingTodo(null);
-      };
-
-      const deleteTodo = (id) => {
-        const nextTodos = todos.filter(t => t.id !== id);
-        setTodos(nextTodos);
-        saveUserData(nextTodos);
-        if (editingTodo && editingTodo.id === id) closeModal();
       };
 
       const toggleComplete = (id) => {
@@ -373,18 +464,46 @@
         saveUserData(undefined, undefined, undefined, code);
       };
 
-      // フィルタリング
-      const currentListTodos = todos.filter(t => t.listId === selectedListId);
-      const filteredTodos = currentListTodos.filter(t => {
-        const matchesSearch = t.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                              t.detail.toLowerCase().includes(searchQuery.toLowerCase());
-        const matchesTag = selectedTagFilter === 'すべて' || (t.tags && t.tags.includes(selectedTagFilter));
-        return matchesSearch && matchesTag;
-      });
-
-      // 日付関連
+      // 日付関連計算
       const todayObj = new Date();
       const todayStr = todayObj.toISOString().split('T')[0];
+
+      // Smart フィルタリング & ソート
+      const currentListTodos = todos.filter(t => t.listId === selectedListId);
+      
+      const filteredTodos = currentListTodos.filter(t => {
+        // 1. 文字検索
+        const matchesSearch = t.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                              t.detail.toLowerCase().includes(searchQuery.toLowerCase());
+        // 2. タグ検索
+        const matchesTag = selectedTagFilter === 'すべて' || (t.tags && t.tags.includes(selectedTagFilter));
+
+        // 3. 期間検索
+        let matchesDate = true;
+        if (selectedDateFilter === 'today') {
+          matchesDate = t.hasDate !== false && t.startDate <= todayStr && t.endDate >= todayStr;
+        } else if (selectedDateFilter === 'this_week') {
+          const weekLaterObj = new Date();
+          weekLaterObj.setDate(weekLaterObj.getDate() + 7);
+          const weekLaterStr = weekLaterObj.toISOString().split('T')[0];
+          matchesDate = t.hasDate !== false && t.startDate <= weekLaterStr && t.endDate >= todayStr;
+        } else if (selectedDateFilter === 'no_date') {
+          matchesDate = t.hasDate === false;
+        }
+
+        return matchesSearch && matchesTag && matchesDate;
+      }).sort((a, b) => {
+        if (sortBy === 'essential') {
+          return (b.isEssential ? 1 : 0) - (a.isEssential ? 1 : 0);
+        } else if (sortBy === 'date') {
+          if (!a.hasDate) return 1;
+          if (!b.hasDate) return -1;
+          return a.startDate.localeCompare(b.startDate);
+        } else {
+          return b.id.localeCompare(a.id); // 作成順 (Newest)
+        }
+      });
+
       const todayTodos = currentListTodos.filter(t => t.hasDate !== false && t.startDate <= todayStr && t.endDate >= todayStr);
       const todayMemos = memos.filter(m => !m.date || m.date === todayStr);
       const overdueTodos = currentListTodos.filter(t => t.hasDate !== false && t.endDate < todayStr && !t.completed);
@@ -431,7 +550,7 @@
                   type="text"
                   value={userId}
                   onChange={(e) => setUserId(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500 transition"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-base outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500 transition"
                   placeholder="ユーザーID"
                   required
                 />
@@ -439,7 +558,7 @@
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500 transition"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-base outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500 transition"
                   placeholder="パスワード"
                   required
                 />
@@ -636,6 +755,7 @@
                                     <i data-lucide="alert-circle" className="w-3 h-3"></i> 必須
                                   </span>
                                 )}
+                                {todo.isLocked && <span className="text-slate-400" title="ロック中">🔒</span>}
                               </div>
                               {todo.detail && <p className="text-[11px] text-slate-500 truncate mt-1">{todo.detail}</p>}
                               <div className="flex items-center gap-2.5 mt-1.5 text-[10px] text-slate-400 font-medium">
@@ -646,10 +766,13 @@
                             </div>
                           </div>
                           <div className="flex items-center gap-1">
-                            <button onClick={() => openModalForEdit(todo)} className="text-slate-400 hover:text-indigo-600 p-1.5 rounded-lg hover:bg-slate-100">
+                            <button onClick={() => toggleLockTodo(todo.id)} className="text-slate-400 hover:text-indigo-600 p-1 rounded hover:bg-slate-100" title={todo.isLocked ? "ロック解除" : "ロックする"}>
+                              {todo.isLocked ? "🔒" : "🔓"}
+                            </button>
+                            <button onClick={() => openModalForEdit(todo)} className="text-slate-400 hover:text-indigo-600 p-1 rounded hover:bg-slate-100">
                               <i data-lucide="edit-3" className="w-3.5 h-3.5"></i>
                             </button>
-                            <button onClick={() => deleteTodo(todo.id)} className="text-slate-400 hover:text-rose-600 p-1.5 rounded-lg hover:bg-slate-100">
+                            <button onClick={() => deleteTodo(todo.id)} className="text-slate-400 hover:text-rose-600 p-1 rounded hover:bg-slate-100">
                               <i data-lucide="trash-2" className="w-3.5 h-3.5"></i>
                             </button>
                           </div>
@@ -675,7 +798,7 @@
                       placeholder="例: 牛乳を買う、ゴミ出し..."
                       value={newQuickMemo}
                       onChange={(e) => setNewQuickMemo(e.target.value)}
-                      className="flex-1 px-3 py-1.5 bg-white border border-amber-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-amber-500"
+                      className="flex-1 px-3 py-1.5 bg-white border border-amber-200 rounded-xl text-base outline-none focus:ring-2 focus:ring-amber-500"
                       onKeyDown={(e) => { if (e.key === 'Enter') handleAddMemo(todayStr); }}
                     />
                     <button
@@ -701,11 +824,10 @@
                           </span>
                         </div>
                         <div className="flex items-center gap-1">
-                          {/* 💡 覚え書きをカレンダー（ToDo）へ昇格させるボタン */}
                           <button
                             onClick={() => promoteMemoToTodo(memo)}
                             className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-lg text-[10px] font-bold flex items-center gap-1 transition"
-                            title="この日にやる予定（ToDo）としてカレンダーに落とし込む"
+                            title="ToDo（予定）としてカレンダーに落とし込む"
                           >
                             <i data-lucide="calendar-plus" className="w-3 h-3"></i> 予定にする
                           </button>
@@ -720,91 +842,160 @@
               </div>
             )}
 
-            {/* TAB 2: すべてのToDo */}
+            {/* TAB 2: すべてのToDo (高度検索・ソート・一括削除対応) */}
             {activeTab === 'todos' && (
               <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    placeholder="タスクを検索..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="flex-1 px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-indigo-500 transition shadow-xs"
-                  />
-                  <div className="flex items-center gap-1 overflow-x-auto">
-                    <button
-                      onClick={() => setSelectedTagFilter('すべて')}
-                      className={`px-2.5 py-1 rounded-xl text-[10px] font-bold whitespace-nowrap transition ${
-                        selectedTagFilter === 'すべて' ? 'bg-indigo-600 text-white shadow-xs' : 'bg-white border border-slate-200 text-slate-600'
-                      }`}
-                    >
-                      すべて
-                    </button>
-                    {tags.map(tag => (
+                {/* 検索・フィルターコントロールパネル */}
+                <div className="bg-white p-3 rounded-2xl border border-slate-200/80 shadow-xs space-y-2">
+                  {/* 1. 文字検索入力 */}
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder="タイトルや詳細で文字検索..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-base outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500 transition"
+                    />
+                  </div>
+
+                  {/* 2. 期間・ソート・一括削除コントロール */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {/* 期間フィルター */}
+                      <select
+                        value={selectedDateFilter}
+                        onChange={(e) => setSelectedDateFilter(e.target.value)}
+                        className="bg-slate-100 px-2 py-1 rounded-lg text-[10px] font-bold text-slate-700 outline-none border border-slate-200 cursor-pointer"
+                      >
+                        <option value="すべて">📅 期間: すべて</option>
+                        <option value="today">📅 期間: 本日</option>
+                        <option value="this_week">📅 期間: 今週以内</option>
+                        <option value="no_date">📅 期間: 期限なし</option>
+                      </select>
+
+                      {/* ソート順 */}
+                      <select
+                        value={sortBy}
+                        onChange={(e) => setSortBy(e.target.value)}
+                        className="bg-slate-100 px-2 py-1 rounded-lg text-[10px] font-bold text-slate-700 outline-none border border-slate-200 cursor-pointer"
+                      >
+                        <option value="created">⇅ 新しい順</option>
+                        <option value="essential">⇅ 必須（優先）順</option>
+                        <option value="date">⇅ 期限が近い順</option>
+                      </select>
+                    </div>
+
+                    {/* 選択項目一括削除 */}
+                    {selectedTodoIds.length > 0 && (
                       <button
-                        key={tag}
-                        onClick={() => setSelectedTagFilter(tag)}
-                        className={`px-2.5 py-1 rounded-xl text-[10px] font-bold whitespace-nowrap transition ${
-                          selectedTagFilter === tag ? 'bg-indigo-600 text-white shadow-xs' : 'bg-white border border-slate-200 text-slate-600'
+                        onClick={handleBulkDelete}
+                        className="bg-rose-600 hover:bg-rose-700 text-white px-2.5 py-1 rounded-lg text-[10px] font-bold transition shadow-xs flex items-center gap-1"
+                      >
+                        <i data-lucide="trash-2" className="w-3 h-3"></i>
+                        選択した{selectedTodoIds.length}件を一括削除
+                      </button>
+                    )}
+                  </div>
+
+                  {/* 3. タグフィルター */}
+                  {tags.length > 0 && (
+                    <div className="flex items-center gap-1 overflow-x-auto pt-1 border-t border-slate-100">
+                      <span className="text-[10px] text-slate-400 font-bold whitespace-nowrap">タグ:</span>
+                      <button
+                        onClick={() => setSelectedTagFilter('すべて')}
+                        className={`px-2 py-0.5 rounded-md text-[10px] font-bold whitespace-nowrap ${
+                          selectedTagFilter === 'すべて' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'
                         }`}
                       >
-                        #{tag}
+                        すべて
                       </button>
-                    ))}
-                  </div>
+                      {tags.map(tag => (
+                        <button
+                          key={tag}
+                          onClick={() => setSelectedTagFilter(tag)}
+                          className={`px-2 py-0.5 rounded-md text-[10px] font-bold whitespace-nowrap ${
+                            selectedTagFilter === tag ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'
+                          }`}
+                        >
+                          #{tag}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
+                {/* ToDoリスト一覧 */}
                 <div className="space-y-2">
                   {filteredTodos.length === 0 ? (
                     <div className="bg-white p-8 rounded-2xl border border-slate-200/80 text-center text-slate-400 text-xs">
-                      ToDoは見つかりませんでした。
+                      条件に一致するToDoは見つかりませんでした。
                     </div>
                   ) : (
-                    filteredTodos.map(todo => (
-                      <div
-                        key={todo.id}
-                        className={`p-3 rounded-2xl transition border ${
-                          todo.isEssential
-                            ? 'bg-gradient-to-r from-red-500/10 via-rose-50 to-white border-red-500 border-2 shadow-md shadow-red-100'
-                            : 'bg-white border-slate-200 shadow-xs'
-                        } ${todo.completed ? 'opacity-40 bg-slate-100' : ''}`}
-                      >
-                        <div className="flex items-start justify-between gap-2.5">
-                          <div className="flex items-start gap-2.5 flex-1 min-w-0">
-                            <input
-                              type="checkbox"
-                              checked={todo.completed}
-                              onChange={() => toggleComplete(todo.id)}
-                              className="mt-0.5 w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer"
-                            />
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2">
-                                <span className={`font-bold text-slate-800 truncate text-xs ${todo.completed ? 'line-through text-slate-400' : ''}`}>{todo.title}</span>
-                                {todo.isEssential && (
-                                  <span className="bg-red-600 text-white font-extrabold text-[9px] px-2 py-0.5 rounded-full shadow-xs animate-pulse flex items-center gap-0.5">
-                                    <i data-lucide="alert-circle" className="w-3 h-3"></i> 必須
+                    filteredTodos.map(todo => {
+                      const isSelected = selectedTodoIds.includes(todo.id);
+                      return (
+                        <div
+                          key={todo.id}
+                          className={`p-3 rounded-2xl transition border ${
+                            todo.isEssential
+                              ? 'bg-gradient-to-r from-red-500/10 via-rose-50 to-white border-red-500 border-2 shadow-md shadow-red-100'
+                              : 'bg-white border-slate-200 shadow-xs'
+                          } ${todo.completed ? 'opacity-40 bg-slate-100' : ''} ${isSelected ? 'ring-2 ring-indigo-500' : ''}`}
+                        >
+                          <div className="flex items-start justify-between gap-2.5">
+                            <div className="flex items-start gap-2.5 flex-1 min-w-0">
+                              {/* 一括選択用チェックボックス */}
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => toggleTodoSelect(todo.id)}
+                                className="mt-0.5 w-4 h-4 text-indigo-600 rounded border-slate-300 cursor-pointer"
+                                title="一括操作対象に選択"
+                              />
+
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <span
+                                    onClick={() => toggleComplete(todo.id)}
+                                    className={`font-bold text-slate-800 text-xs cursor-pointer ${todo.completed ? 'line-through text-slate-400' : ''}`}
+                                  >
+                                    {todo.title}
                                   </span>
-                                )}
-                              </div>
-                              {todo.detail && <p className="text-[11px] text-slate-500 truncate mt-1">{todo.detail}</p>}
-                              <div className="flex items-center gap-2.5 mt-1.5 text-[10px] text-slate-400 font-medium">
-                                {todo.hasDate !== false ? <span>📅 {todo.startDate} 〜 {todo.endDate}</span> : <span className="text-amber-600 font-bold">期限なし</span>}
-                                {todo.hasTime && todo.time && <span>🕒 {todo.time}</span>}
-                                {todo.tags && todo.tags.map(tag => <span key={tag} className="text-slate-500 bg-slate-100 px-1.5 py-0.2 rounded">#{tag}</span>)}
+                                  {todo.isEssential && (
+                                    <span className="bg-red-600 text-white font-extrabold text-[9px] px-2 py-0.5 rounded-full shadow-xs animate-pulse flex items-center gap-0.5">
+                                      <i data-lucide="alert-circle" className="w-3 h-3"></i> 必須
+                                    </span>
+                                  )}
+                                  {todo.isLocked && <span className="text-slate-400" title="ロック中（一括削除から守られています）">🔒</span>}
+                                </div>
+                                {todo.detail && <p className="text-[11px] text-slate-500 truncate mt-1">{todo.detail}</p>}
+                                <div className="flex items-center gap-2.5 mt-1.5 text-[10px] text-slate-400 font-medium">
+                                  {todo.hasDate !== false ? <span>📅 {todo.startDate} 〜 {todo.endDate}</span> : <span className="text-amber-600 font-bold">期限なし</span>}
+                                  {todo.hasTime && todo.time && <span>🕒 {todo.time}</span>}
+                                  {todo.tags && todo.tags.map(tag => <span key={tag} className="text-slate-500 bg-slate-100 px-1.5 py-0.2 rounded">#{tag}</span>)}
+                                </div>
                               </div>
                             </div>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <button onClick={() => openModalForEdit(todo)} className="text-slate-400 hover:text-indigo-600 p-1.5 rounded-lg hover:bg-slate-100">
-                              <i data-lucide="edit-3" className="w-3.5 h-3.5"></i>
-                            </button>
-                            <button onClick={() => deleteTodo(todo.id)} className="text-slate-400 hover:text-rose-600 p-1.5 rounded-lg hover:bg-slate-100">
-                              <i data-lucide="trash-2" className="w-3.5 h-3.5"></i>
-                            </button>
+
+                            <div className="flex items-center gap-1">
+                              <button
+                                onClick={() => toggleLockTodo(todo.id)}
+                                className="text-slate-400 hover:text-indigo-600 p-1 rounded hover:bg-slate-100"
+                                title={todo.isLocked ? "ロック解除" : "誤削除を防ぐロック"}
+                              >
+                                {todo.isLocked ? "🔒" : "🔓"}
+                              </button>
+                              <button onClick={() => openModalForEdit(todo)} className="text-slate-400 hover:text-indigo-600 p-1.5 rounded-lg hover:bg-slate-100">
+                                <i data-lucide="edit-3" className="w-3.5 h-3.5"></i>
+                              </button>
+                              <button onClick={() => deleteTodo(todo.id)} className="text-slate-400 hover:text-rose-600 p-1.5 rounded-lg hover:bg-slate-100">
+                                <i data-lucide="trash-2" className="w-3.5 h-3.5"></i>
+                              </button>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))
+                      );
+                    })
                   )}
                 </div>
               </div>
@@ -825,7 +1016,7 @@
                       placeholder="買いたいものや気になったメモを入力..."
                       value={newQuickMemo}
                       onChange={(e) => setNewQuickMemo(e.target.value)}
-                      className="flex-1 px-3 py-2 border border-slate-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-indigo-500"
+                      className="flex-1 px-3 py-2 border border-slate-200 rounded-xl text-base outline-none focus:ring-2 focus:ring-indigo-500"
                       onKeyDown={(e) => { if (e.key === 'Enter') handleAddMemo(); }}
                     />
                     <button
@@ -857,11 +1048,10 @@
                           </span>
                         </div>
                         <div className="flex items-center gap-2">
-                          {/* 💡 覚え書きをカレンダー（ToDo）へ昇格させるボタン */}
                           <button
                             onClick={() => promoteMemoToTodo(memo)}
                             className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-2.5 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 transition"
-                            title="この日にやる予定（ToDo）としてカレンダーに落とし込む"
+                            title="ToDo（予定）としてカレンダーに落とし込む"
                           >
                             <i data-lucide="calendar-plus" className="w-3.5 h-3.5"></i> カレンダーに予定化
                           </button>
@@ -944,7 +1134,7 @@
             </div>
           )}
 
-          {/* Todo作成・編集モーダル (時間・期間の任意化対応) */}
+          {/* Todo作成・編集モーダル */}
           {isModalOpen && (
             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 z-50">
               <div className="bg-white rounded-2xl w-full max-w-sm p-4 shadow-2xl border border-slate-100">
@@ -969,7 +1159,7 @@
                     type="text"
                     value={formTitle}
                     onChange={(e) => setFormTitle(e.target.value)}
-                    className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-indigo-500 font-bold"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-base outline-none focus:ring-2 focus:ring-indigo-500 font-bold"
                     placeholder="タイトル"
                     required
                   />
@@ -977,7 +1167,7 @@
                   <textarea
                     value={formDetail}
                     onChange={(e) => setFormDetail(e.target.value)}
-                    className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-indigo-500 h-16"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-base outline-none focus:ring-2 focus:ring-indigo-500 h-16"
                     placeholder="詳細メモ..."
                   />
 
@@ -1000,7 +1190,7 @@
                             type="date"
                             value={formStartDate}
                             onChange={(e) => setFormStartDate(e.target.value)}
-                            className="w-full px-2 py-1 border border-slate-200 rounded-lg text-xs outline-none bg-white"
+                            className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-base outline-none bg-white"
                           />
                         </div>
                         <div>
@@ -1009,7 +1199,7 @@
                             type="date"
                             value={formEndDate}
                             onChange={(e) => setFormEndDate(e.target.value)}
-                            className="w-full px-2 py-1 border border-slate-200 rounded-lg text-xs outline-none bg-white"
+                            className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-base outline-none bg-white"
                           />
                         </div>
                       </div>
@@ -1033,22 +1223,32 @@
                           type="time"
                           value={formTime}
                           onChange={(e) => setFormTime(e.target.value)}
-                          className="w-full px-2 py-1 border border-slate-200 rounded-lg text-xs outline-none bg-white"
+                          className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-base outline-none bg-white"
                         />
                       </div>
                     )}
                   </div>
 
-                  {/* 必須設定 */}
-                  <div>
-                    <label className="flex items-center gap-1.5 py-1 cursor-pointer">
+                  {/* フラグ（必須・ロック） */}
+                  <div className="flex items-center justify-between pt-1">
+                    <label className="flex items-center gap-1.5 cursor-pointer">
                       <input
                         type="checkbox"
                         checked={formIsEssential}
                         onChange={(e) => setFormIsEssential(e.target.checked)}
                         className="w-4 h-4 text-red-600 rounded border-slate-300 focus:ring-red-500"
                       />
-                      <span className="text-xs font-bold text-red-600">必須 (最優先タスク)</span>
+                      <span className="text-xs font-bold text-red-600">必須 (最優先)</span>
+                    </label>
+
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formIsLocked}
+                        onChange={(e) => setFormIsLocked(e.target.checked)}
+                        className="w-4 h-4 text-slate-700 rounded border-slate-300 focus:ring-slate-500"
+                      />
+                      <span className="text-xs font-bold text-slate-700">🔒 ロック (誤削除防止)</span>
                     </label>
                   </div>
 
@@ -1080,9 +1280,9 @@
                         placeholder="新規タグ..."
                         value={newTagInput}
                         onChange={(e) => setNewTagInput(e.target.value)}
-                        className="flex-1 px-2 py-0.5 border border-slate-200 rounded-md text-[10px] outline-none"
+                        className="flex-1 px-2 py-1 border border-slate-200 rounded-md text-base outline-none"
                       />
-                      <button type="button" onClick={handleAddTag} className="bg-slate-100 hover:bg-slate-200 px-2 py-0.5 rounded-md text-[10px] font-bold">追加</button>
+                      <button type="button" onClick={handleAddTag} className="bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded-md text-[10px] font-bold">追加</button>
                     </div>
                   </div>
 
@@ -1095,12 +1295,20 @@
             </div>
           )}
 
-          {/* 地域設定モーダル */}
+          {/* 設定 ＆ ゴミ箱モーダル */}
           {isSettingsOpen && (
             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 z-50">
-              <div className="bg-white rounded-2xl w-full max-w-xs p-4 shadow-2xl border border-slate-100">
-                <h2 className="text-xs font-bold text-slate-800 mb-2">天気予報の地域選択</h2>
-                <div className="space-y-3">
+              <div className="bg-white rounded-2xl w-full max-w-xs p-4 shadow-2xl border border-slate-100 space-y-4">
+                <div className="flex items-center justify-between border-b pb-2">
+                  <h2 className="text-xs font-bold text-slate-800">設定・各種機能</h2>
+                  <button onClick={() => setIsSettingsOpen(false)} className="text-slate-400 p-0.5">
+                    <i data-lucide="x" className="w-4 h-4"></i>
+                  </button>
+                </div>
+
+                {/* 天気予報の地域選択 */}
+                <div className="space-y-1.5">
+                  <label className="block text-[10px] font-bold text-slate-500">天気予報の地域設定</label>
                   <select
                     value={locationCode}
                     onChange={(e) => handleSaveLocation(e.target.value)}
@@ -1110,9 +1318,75 @@
                       <option key={p.code} value={p.code}>{p.name}</option>
                     ))}
                   </select>
-                  <div className="flex justify-end pt-1">
-                    <button onClick={() => setIsSettingsOpen(false)} className="px-3 py-1 bg-indigo-600 text-white rounded-lg text-xs font-bold">保存して閉じる</button>
+                </div>
+
+                {/* ゴミ箱管理ボタン */}
+                <div className="pt-2 border-t border-slate-100 space-y-1">
+                  <label className="block text-[10px] font-bold text-slate-500">ゴミ箱（24時間保管）</label>
+                  <button
+                    onClick={() => setIsTrashOpen(true)}
+                    className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2 rounded-lg text-xs flex items-center justify-center gap-1.5 transition"
+                  >
+                    <i data-lucide="trash-2" className="w-3.5 h-3.5 text-rose-500"></i>
+                    ゴミ箱を開く ({trash.length}件)
+                  </button>
+                </div>
+
+                <div className="flex justify-end pt-2">
+                  <button onClick={() => setIsSettingsOpen(false)} className="px-3 py-1 bg-indigo-600 text-white rounded-lg text-xs font-bold">閉じる</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ゴミ箱専用モーダル */}
+          {isTrashOpen && (
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 z-50">
+              <div className="bg-white rounded-2xl w-full max-w-sm p-4 shadow-2xl border border-slate-100 space-y-3">
+                <div className="flex items-center justify-between border-b pb-2">
+                  <div className="flex items-center gap-1.5">
+                    <i data-lucide="trash-2" className="w-4 h-4 text-rose-500"></i>
+                    <h2 className="text-xs font-bold text-slate-800">ゴミ箱 (24時間以内なら復元可能)</h2>
                   </div>
+                  <button onClick={() => setIsTrashOpen(false)} className="text-slate-400 p-0.5">
+                    <i data-lucide="x" className="w-4 h-4"></i>
+                  </button>
+                </div>
+
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {trash.length === 0 ? (
+                    <div className="p-6 text-center text-slate-400 text-xs">
+                      ゴミ箱は空です。
+                    </div>
+                  ) : (
+                    trash.map(item => (
+                      <div key={item.id} className="bg-slate-50 p-2.5 rounded-xl border border-slate-200 flex items-center justify-between">
+                        <div className="min-w-0 flex-1">
+                          <p className="font-bold text-slate-700 text-xs truncate">{item.title}</p>
+                          <p className="text-[9px] text-slate-400">削除日時: {new Date(item.deletedAt).toLocaleTimeString()}</p>
+                        </div>
+                        <div className="flex items-center gap-1.5 ml-2">
+                          <button
+                            onClick={() => restoreFromTrash(item.id)}
+                            className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-2 py-1 rounded-lg text-[10px] font-bold"
+                          >
+                            復元
+                          </button>
+                          <button
+                            onClick={() => permanentlyDeleteFromTrash(item.id)}
+                            className="text-slate-400 hover:text-rose-600 p-1"
+                            title="完全削除"
+                          >
+                            <i data-lucide="x" className="w-3.5 h-3.5"></i>
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                <div className="flex justify-end pt-1">
+                  <button onClick={() => setIsTrashOpen(false)} className="px-3 py-1 bg-slate-800 text-white rounded-lg text-xs font-bold">閉じる</button>
                 </div>
               </div>
             </div>
@@ -1128,7 +1402,7 @@
                     type="text"
                     value={newListName}
                     onChange={(e) => setNewListName(e.target.value)}
-                    className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-indigo-500 font-bold"
+                    className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-base outline-none focus:ring-2 focus:ring-indigo-500 font-bold"
                     placeholder="リスト名"
                     required
                   />
