@@ -58,7 +58,7 @@
       const [lists, setLists] = useState([]);
       const [selectedListId, setSelectedListId] = useState('');
       const [todos, setTodos] = useState([]);
-      const [memos, setMemos] = useState([]); // 覚え書きメモ [{ id, text, date, completed }]
+      const [memos, setMemos] = useState([]); 
       const [tags, setTags] = useState([]);
 
       // 地域設定
@@ -75,16 +75,18 @@
       const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
       // 新規入力用 State
-      const [newQuickMemo, setNewQuickMemo] = useState(''); // 本日/メモタブ用クイック入力
+      const [newQuickMemo, setNewQuickMemo] = useState('');
 
       // Form State (Todo)
       const [editingTodo, setEditingTodo] = useState(null);
       const [formTitle, setFormTitle] = useState('');
       const [formDetail, setFormDetail] = useState('');
+      const [formHasDate, setFormHasDate] = useState(true); // 期間（期限）の有無
       const [formStartDate, setFormStartDate] = useState(new Date().toISOString().split('T')[0]);
       const [formEndDate, setFormEndDate] = useState(new Date().toISOString().split('T')[0]);
+      const [formHasTime, setFormHasTime] = useState(false); // 時間の有無
       const [formTime, setFormTime] = useState('09:00');
-      const [formIsEssential, setFormIsEssential] = useState(false); // 必須か否か
+      const [formIsEssential, setFormIsEssential] = useState(false); 
       const [formTags, setFormTags] = useState([]);
       const [newTagInput, setNewTagInput] = useState('');
       const [newListName, setNewListName] = useState('');
@@ -203,9 +205,11 @@
             ...t,
             title: formTitle,
             detail: formDetail,
-            startDate: formStartDate,
-            endDate: formEndDate,
-            time: formTime,
+            hasDate: formHasDate,
+            startDate: formHasDate ? formStartDate : '',
+            endDate: formHasDate ? formEndDate : '',
+            hasTime: formHasTime,
+            time: formHasTime ? formTime : '',
             isEssential: formIsEssential,
             tags: formTags,
           } : t);
@@ -215,9 +219,11 @@
             listId: selectedListId,
             title: formTitle,
             detail: formDetail,
-            startDate: formStartDate,
-            endDate: formEndDate,
-            time: formTime,
+            hasDate: formHasDate,
+            startDate: formHasDate ? formStartDate : '',
+            endDate: formHasDate ? formEndDate : '',
+            hasTime: formHasTime,
+            time: formHasTime ? formTime : '',
             isEssential: formIsEssential,
             tags: formTags,
             completed: false,
@@ -235,7 +241,7 @@
         const newMemoItem = {
           id: Date.now().toString(),
           text: newQuickMemo.trim(),
-          date: targetDate || new Date().toISOString().split('T')[0],
+          date: targetDate || '',
           completed: false
         };
         const nextMemos = [newMemoItem, ...memos];
@@ -256,8 +262,32 @@
         saveUserData(undefined, undefined, undefined, undefined, undefined, nextMemos);
       };
 
+      // 💡 覚え書きメモを「カレンダー（ToDo）」に昇格させる仕組み
+      const promoteMemoToTodo = (memo) => {
+        if (!selectedListId && lists.length === 0) {
+          alert('最初にリストを作成してください。');
+          setIsNewListModalOpen(true);
+          return;
+        }
+        // メモを削除して、新規ToDo作成モーダルを開く（テキストをタイトルにセット）
+        deleteMemo(memo.id);
+        
+        setEditingTodo(null);
+        setFormTitle(memo.text);
+        setFormDetail('');
+        setFormHasDate(true);
+        const todayStr = new Date().toISOString().split('T')[0];
+        setFormStartDate(memo.date || todayStr);
+        setFormEndDate(memo.date || todayStr);
+        setFormHasTime(false);
+        setFormTime('09:00');
+        setFormIsEssential(false);
+        setFormTags([]);
+        setIsModalOpen(true);
+      };
+
       const handleRescheduleTodo = (id, newDate) => {
-        const nextTodos = todos.map(t => t.id === id ? { ...t, startDate: newDate, endDate: newDate } : t);
+        const nextTodos = todos.map(t => t.id === id ? { ...t, hasDate: true, startDate: newDate, endDate: newDate } : t);
         setTodos(nextTodos);
         saveUserData(nextTodos);
       };
@@ -271,8 +301,10 @@
         setEditingTodo(null);
         setFormTitle('');
         setFormDetail('');
+        setFormHasDate(true);
         setFormStartDate(targetDateStr);
         setFormEndDate(targetDateStr);
+        setFormHasTime(false);
         setFormTime('09:00');
         setFormIsEssential(false);
         setFormTags([]);
@@ -287,9 +319,11 @@
         setEditingTodo(todo);
         setFormTitle(todo.title);
         setFormDetail(todo.detail);
-        setFormStartDate(todo.startDate);
-        setFormEndDate(todo.endDate);
-        setFormTime(todo.time);
+        setFormHasDate(todo.hasDate !== false);
+        setFormStartDate(todo.startDate || new Date().toISOString().split('T')[0]);
+        setFormEndDate(todo.endDate || new Date().toISOString().split('T')[0]);
+        setFormHasTime(!!todo.hasTime);
+        setFormTime(todo.time || '09:00');
         setFormIsEssential(!!todo.isEssential);
         setFormTags(todo.tags || []);
         setIsModalOpen(true);
@@ -351,9 +385,9 @@
       // 日付関連
       const todayObj = new Date();
       const todayStr = todayObj.toISOString().split('T')[0];
-      const todayTodos = currentListTodos.filter(t => t.startDate <= todayStr && t.endDate >= todayStr);
-      const todayMemos = memos.filter(m => m.date === todayStr);
-      const overdueTodos = currentListTodos.filter(t => t.endDate < todayStr && !t.completed);
+      const todayTodos = currentListTodos.filter(t => t.hasDate !== false && t.startDate <= todayStr && t.endDate >= todayStr);
+      const todayMemos = memos.filter(m => !m.date || m.date === todayStr);
+      const overdueTodos = currentListTodos.filter(t => t.hasDate !== false && t.endDate < todayStr && !t.completed);
 
       const dayOfWeekStr = ['日', '月', '火', '水', '木', '金', '土'][todayObj.getDay()];
       const formattedToday = `${todayObj.getMonth() + 1}月${todayObj.getDate()}日 (${dayOfWeekStr})`;
@@ -605,7 +639,8 @@
                               </div>
                               {todo.detail && <p className="text-[11px] text-slate-500 truncate mt-1">{todo.detail}</p>}
                               <div className="flex items-center gap-2.5 mt-1.5 text-[10px] text-slate-400 font-medium">
-                                <span>🕒 {todo.time}</span>
+                                {todo.hasTime && todo.time && <span>🕒 {todo.time}</span>}
+                                {!todo.hasDate && <span className="text-amber-600 font-bold">期限なし</span>}
                                 {todo.tags && todo.tags.map(tag => <span key={tag} className="text-slate-500 bg-slate-100 px-1.5 py-0.2 rounded">#{tag}</span>)}
                               </div>
                             </div>
@@ -624,12 +659,12 @@
                   )}
                 </div>
 
-                {/* 本日の覚え書きメモ（クイックメモ機能） */}
+                {/* 本日の覚え書きメモ */}
                 <div className="bg-amber-50/60 border border-amber-200/80 rounded-2xl p-3.5 space-y-2.5">
                   <div className="flex items-center justify-between">
                     <span className="font-extrabold text-amber-900 text-xs flex items-center gap-1">
                       <i data-lucide="pin" className="w-3.5 h-3.5 text-amber-600"></i>
-                      本日の覚え書きメモ (買わないと・やらないと)
+                      本日の覚え書きメモ
                     </span>
                     <span className="text-[10px] text-amber-600 font-bold">{todayMemos.length}件</span>
                   </div>
@@ -665,9 +700,19 @@
                             {memo.text}
                           </span>
                         </div>
-                        <button onClick={() => deleteMemo(memo.id)} className="text-slate-300 hover:text-rose-500 p-1">
-                          <i data-lucide="x" className="w-3.5 h-3.5"></i>
-                        </button>
+                        <div className="flex items-center gap-1">
+                          {/* 💡 覚え書きをカレンダー（ToDo）へ昇格させるボタン */}
+                          <button
+                            onClick={() => promoteMemoToTodo(memo)}
+                            className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-lg text-[10px] font-bold flex items-center gap-1 transition"
+                            title="この日にやる予定（ToDo）としてカレンダーに落とし込む"
+                          >
+                            <i data-lucide="calendar-plus" className="w-3 h-3"></i> 予定にする
+                          </button>
+                          <button onClick={() => deleteMemo(memo.id)} className="text-slate-300 hover:text-rose-500 p-1">
+                            <i data-lucide="x" className="w-3.5 h-3.5"></i>
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -743,8 +788,8 @@
                               </div>
                               {todo.detail && <p className="text-[11px] text-slate-500 truncate mt-1">{todo.detail}</p>}
                               <div className="flex items-center gap-2.5 mt-1.5 text-[10px] text-slate-400 font-medium">
-                                <span>📅 {todo.startDate} 〜 {todo.endDate}</span>
-                                <span>🕒 {todo.time}</span>
+                                {todo.hasDate !== false ? <span>📅 {todo.startDate} 〜 {todo.endDate}</span> : <span className="text-amber-600 font-bold">期限なし</span>}
+                                {todo.hasTime && todo.time && <span>🕒 {todo.time}</span>}
                                 {todo.tags && todo.tags.map(tag => <span key={tag} className="text-slate-500 bg-slate-100 px-1.5 py-0.2 rounded">#{tag}</span>)}
                               </div>
                             </div>
@@ -812,7 +857,14 @@
                           </span>
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className="text-[9px] text-slate-400 font-medium">{memo.date}</span>
+                          {/* 💡 覚え書きをカレンダー（ToDo）へ昇格させるボタン */}
+                          <button
+                            onClick={() => promoteMemoToTodo(memo)}
+                            className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-2.5 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 transition"
+                            title="この日にやる予定（ToDo）としてカレンダーに落とし込む"
+                          >
+                            <i data-lucide="calendar-plus" className="w-3.5 h-3.5"></i> カレンダーに予定化
+                          </button>
                           <button onClick={() => deleteMemo(memo.id)} className="text-slate-300 hover:text-rose-600 p-1">
                             <i data-lucide="trash-2" className="w-3.5 h-3.5"></i>
                           </button>
@@ -853,7 +905,7 @@
                 <div className="grid grid-cols-7 gap-1">
                   {calendarDays.map((item, index) => {
                     if (!item) return <div key={`empty-${index}`} className="h-14 bg-slate-50/50 rounded-lg"></div>;
-                    const dayTodos = currentListTodos.filter(t => t.startDate <= item.dateStr && t.endDate >= item.dateStr);
+                    const dayTodos = currentListTodos.filter(t => t.hasDate !== false && t.startDate <= item.dateStr && t.endDate >= item.dateStr);
                     const dayMemoCount = memos.filter(m => m.date === item.dateStr).length;
 
                     return (
@@ -892,7 +944,7 @@
             </div>
           )}
 
-          {/* Todo作成・編集モーダル */}
+          {/* Todo作成・編集モーダル (時間・期間の任意化対応) */}
           {isModalOpen && (
             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 z-50">
               <div className="bg-white rounded-2xl w-full max-w-sm p-4 shadow-2xl border border-slate-100">
@@ -929,49 +981,75 @@
                     placeholder="詳細メモ..."
                   />
 
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="block text-[9px] font-bold text-slate-400 mb-0.5">開始日</label>
+                  {/* 期間指定の有無 */}
+                  <div className="bg-slate-50 p-2 rounded-xl border border-slate-200/60 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[10px] font-bold text-slate-600">期間（期限）を設定する</label>
                       <input
-                        type="date"
-                        value={formStartDate}
-                        onChange={(e) => setFormStartDate(e.target.value)}
-                        className="w-full px-2 py-1 border border-slate-200 rounded-lg text-xs outline-none"
+                        type="checkbox"
+                        checked={formHasDate}
+                        onChange={(e) => setFormHasDate(e.target.checked)}
+                        className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer"
                       />
                     </div>
-                    <div>
-                      <label className="block text-[9px] font-bold text-slate-400 mb-0.5">終了日</label>
-                      <input
-                        type="date"
-                        value={formEndDate}
-                        onChange={(e) => setFormEndDate(e.target.value)}
-                        className="w-full px-2 py-1 border border-slate-200 rounded-lg text-xs outline-none"
-                      />
-                    </div>
+                    {formHasDate && (
+                      <div className="grid grid-cols-2 gap-2 pt-1">
+                        <div>
+                          <label className="block text-[9px] font-bold text-slate-400 mb-0.5">開始日</label>
+                          <input
+                            type="date"
+                            value={formStartDate}
+                            onChange={(e) => setFormStartDate(e.target.value)}
+                            className="w-full px-2 py-1 border border-slate-200 rounded-lg text-xs outline-none bg-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[9px] font-bold text-slate-400 mb-0.5">終了日</label>
+                          <input
+                            type="date"
+                            value={formEndDate}
+                            onChange={(e) => setFormEndDate(e.target.value)}
+                            className="w-full px-2 py-1 border border-slate-200 rounded-lg text-xs outline-none bg-white"
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="block text-[9px] font-bold text-slate-400 mb-0.5">時間</label>
+                  {/* 時間指定の有無 */}
+                  <div className="bg-slate-50 p-2 rounded-xl border border-slate-200/60 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[10px] font-bold text-slate-600">時間を指定する</label>
                       <input
-                        type="time"
-                        value={formTime}
-                        onChange={(e) => setFormTime(e.target.value)}
-                        className="w-full px-2 py-1 border border-slate-200 rounded-lg text-xs outline-none"
+                        type="checkbox"
+                        checked={formHasTime}
+                        onChange={(e) => setFormHasTime(e.target.checked)}
+                        className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer"
                       />
                     </div>
-                    <div>
-                      <label className="block text-[9px] font-bold text-slate-400 mb-0.5">重要度設定</label>
-                      <label className="flex items-center gap-1.5 py-1.5 cursor-pointer">
+                    {formHasTime && (
+                      <div>
                         <input
-                          type="checkbox"
-                          checked={formIsEssential}
-                          onChange={(e) => setFormIsEssential(e.target.checked)}
-                          className="w-4 h-4 text-red-600 rounded border-slate-300 focus:ring-red-500"
+                          type="time"
+                          value={formTime}
+                          onChange={(e) => setFormTime(e.target.value)}
+                          className="w-full px-2 py-1 border border-slate-200 rounded-lg text-xs outline-none bg-white"
                         />
-                        <span className="text-xs font-bold text-red-600">必須 (最優先)</span>
-                      </label>
-                    </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 必須設定 */}
+                  <div>
+                    <label className="flex items-center gap-1.5 py-1 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formIsEssential}
+                        onChange={(e) => setFormIsEssential(e.target.checked)}
+                        className="w-4 h-4 text-red-600 rounded border-slate-300 focus:ring-red-500"
+                      />
+                      <span className="text-xs font-bold text-red-600">必須 (最優先タスク)</span>
+                    </label>
                   </div>
 
                   <div>
