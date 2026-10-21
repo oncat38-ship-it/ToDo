@@ -58,9 +58,15 @@
       const [lists, setLists] = useState([]);
       const [selectedListId, setSelectedListId] = useState('');
       const [todos, setTodos] = useState([]);
-      const [trash, setTrash] = useState([]); // ゴミ箱 [{ ...todo, deletedAt }]
+      const [trash, setTrash] = useState([]);
       const [memos, setMemos] = useState([]); 
       const [tags, setTags] = useState([]);
+
+      // 新機能: 予定イベント・給料日・休日設定データ
+      const [events, setEvents] = useState([]); // [{ id, title, date, category: 'birthday'|'live'|'event'|'travel' }]
+      const [payday, setPayday] = useState('25'); // 毎月の給料日 (1〜31)
+      const [holidays, setHolidays] = useState([]); // [{ id, memberName, date, color }]
+      const [memberNames, setMemberNames] = useState(['自分', '家族']);
 
       // 地域設定
       const [locationCode, setLocationCode] = useState('230000');
@@ -68,20 +74,21 @@
       // 検索・フィルター・ソート
       const [searchQuery, setSearchQuery] = useState('');
       const [selectedTagFilter, setSelectedTagFilter] = useState('すべて');
-      const [selectedDateFilter, setSelectedDateFilter] = useState('すべて'); // 'すべて' | 'today' | 'this_week' | 'no_date'
-      const [sortBy, setSortBy] = useState('created'); // 'created' | 'essential' | 'date'
+      const [selectedDateFilter, setSelectedDateFilter] = useState('すべて');
+      const [sortBy, setSortBy] = useState('created');
 
       // モーダル管理
       const [isCalendarOpen, setIsCalendarOpen] = useState(false);
       const [isModalOpen, setIsModalOpen] = useState(false);
       const [isNewListModalOpen, setIsNewListModalOpen] = useState(false);
       const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-      const [isTrashOpen, setIsTrashOpen] = useState(false); // ゴミ箱モーダル
+      const [isTrashOpen, setIsTrashOpen] = useState(false);
+      const [isEventModalOpen, setIsEventModalOpen] = useState(false); // イベント・休日作成用
 
-      // 一括操作用（選択されたTodo ID）
+      // 一括操作用
       const [selectedTodoIds, setSelectedTodoIds] = useState([]);
 
-      // 入力用 State
+      // 入力 State (クイックメモ)
       const [newQuickMemo, setNewQuickMemo] = useState('');
 
       // Form State (Todo)
@@ -98,6 +105,14 @@
       const [formTags, setFormTags] = useState([]);
       const [newTagInput, setNewTagInput] = useState('');
       const [newListName, setNewListName] = useState('');
+
+      // Form State (Event & Holiday)
+      const [eventFormType, setEventFormType] = useState('event'); // 'event' | 'holiday'
+      const [eventTitle, setEventTitle] = useState('');
+      const [eventCategory, setEventCategory] = useState('event'); // 'event' | 'birthday' | 'live' | 'travel'
+      const [eventDate, setEventDate] = useState(new Date().toISOString().split('T')[0]);
+      const [holidayMember, setHolidayMember] = useState('自分');
+      const [newMemberInput, setNewMemberInput] = useState('');
 
       // カレンダー用
       const [currentDate, setCurrentDate] = useState(new Date());
@@ -118,7 +133,7 @@
         if (window.lucide) window.lucide.createIcons();
       });
 
-      // 天気取得 (気象庁API)
+      // 天気取得
       useEffect(() => {
         if (!isLoggedIn) return;
         fetch(`https://www.jma.go.jp/bosai/forecast/data/forecast/${locationCode}.json`)
@@ -145,7 +160,6 @@
           setSelectedListId(data.selectedListId || (data.lists && data.lists[0]?.id) || '');
           setTodos(data.todos || []);
           
-          // ゴミ箱データの24時間自動クリーンアップ
           const now = Date.now();
           const validTrash = (data.trash || []).filter(item => (now - item.deletedAt) < 24 * 60 * 60 * 1000);
           setTrash(validTrash);
@@ -153,6 +167,12 @@
           setMemos(data.memos || []);
           setTags(data.tags || []);
           setLocationCode(data.locationCode || '230000');
+
+          // 新機能データのロード
+          setEvents(data.events || []);
+          setPayday(data.payday || '25');
+          setHolidays(data.holidays || []);
+          setMemberNames(data.memberNames || ['自分', '家族']);
         } else {
           setLists([]);
           setSelectedListId('');
@@ -161,13 +181,20 @@
           setMemos([]);
           setTags([]);
           setLocationCode('230000');
+          setEvents([]);
+          setPayday('25');
+          setHolidays([]);
+          setMemberNames(['自分', '家族']);
         }
         setUserId(id);
         setIsLoggedIn(true);
         localStorage.setItem('app_active_user', id);
       };
 
-      const saveUserData = (updatedTodos, updatedLists, updatedTags, updatedLocation, updatedSelectedListId, updatedMemos, updatedTrash) => {
+      const saveUserData = (
+        updatedTodos, updatedLists, updatedTags, updatedLocation, updatedSelectedListId, updatedMemos, updatedTrash,
+        updatedEvents, updatedPayday, updatedHolidays, updatedMembers
+      ) => {
         if (!userId) return;
         const dataToSave = {
           lists: updatedLists !== undefined ? updatedLists : lists,
@@ -176,7 +203,11 @@
           trash: updatedTrash !== undefined ? updatedTrash : trash,
           memos: updatedMemos !== undefined ? updatedMemos : memos,
           tags: updatedTags !== undefined ? updatedTags : tags,
-          locationCode: updatedLocation !== undefined ? updatedLocation : locationCode
+          locationCode: updatedLocation !== undefined ? updatedLocation : locationCode,
+          events: updatedEvents !== undefined ? updatedEvents : events,
+          payday: updatedPayday !== undefined ? updatedPayday : payday,
+          holidays: updatedHolidays !== undefined ? updatedHolidays : holidays,
+          memberNames: updatedMembers !== undefined ? updatedMembers : memberNames
         };
         localStorage.setItem(`app_data_${userId}`, JSON.stringify(dataToSave));
       };
@@ -253,7 +284,57 @@
         closeModal();
       };
 
-      // ゴミ箱へ移動（論理削除）
+      // イベント / 休日の保存
+      const handleSaveEventOrHoliday = (e) => {
+        e.preventDefault();
+        if (eventFormType === 'event') {
+          if (!eventTitle.trim()) return;
+          const newEv = {
+            id: Date.now().toString(),
+            title: eventTitle.trim(),
+            date: eventDate,
+            category: eventCategory
+          };
+          const nextEvents = [...events, newEv];
+          setEvents(nextEvents);
+          saveUserData(undefined, undefined, undefined, undefined, undefined, undefined, undefined, nextEvents);
+        } else {
+          const newHol = {
+            id: Date.now().toString(),
+            memberName: holidayMember,
+            date: eventDate
+          };
+          const nextHolidays = [...holidays, newHol];
+          setHolidays(nextHolidays);
+          saveUserData(undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, nextHolidays);
+        }
+        setIsEventModalOpen(false);
+        setEventTitle('');
+      };
+
+      const deleteEvent = (id) => {
+        const nextEvents = events.filter(e => e.id !== id);
+        setEvents(nextEvents);
+        saveUserData(undefined, undefined, undefined, undefined, undefined, undefined, undefined, nextEvents);
+      };
+
+      const deleteHoliday = (id) => {
+        const nextHolidays = holidays.filter(h => h.id !== id);
+        setHolidays(nextHolidays);
+        saveUserData(undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, nextHolidays);
+      };
+
+      const handleAddMember = () => {
+        if (newMemberInput.trim() && !memberNames.includes(newMemberInput.trim())) {
+          const nextMembers = [...memberNames, newMemberInput.trim()];
+          setMemberNames(nextMembers);
+          setHolidayMember(newMemberInput.trim());
+          saveUserData(undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, nextMembers);
+          setNewMemberInput('');
+        }
+      };
+
+      // ゴミ箱操作
       const deleteTodo = (id) => {
         const target = todos.find(t => t.id === id);
         if (!target) return;
@@ -272,7 +353,6 @@
         if (editingTodo && editingTodo.id === id) closeModal();
       };
 
-      // ゴミ箱からの復元
       const restoreFromTrash = (id) => {
         const target = trash.find(t => t.id === id);
         if (!target) return;
@@ -286,24 +366,16 @@
         saveUserData(nextTodos, undefined, undefined, undefined, undefined, undefined, nextTrash);
       };
 
-      // ゴミ箱からの完全削除
       const permanentlyDeleteFromTrash = (id) => {
         const nextTrash = trash.filter(t => t.id !== id);
         setTrash(nextTrash);
         saveUserData(undefined, undefined, undefined, undefined, undefined, undefined, nextTrash);
       };
 
-      // 選択したチェックボックス項目を一括削除（ロック済みは除外）
       const handleBulkDelete = () => {
         if (selectedTodoIds.length === 0) return;
 
         const targets = todos.filter(t => selectedTodoIds.includes(t.id));
-        const lockedTargets = targets.filter(t => t.isLocked);
-
-        if (lockedTargets.length > 0) {
-          alert(`選択した項目のうち ${lockedTargets.length} 件は🔒ロックされているため削除対象から除外されます。`);
-        }
-
         const deletableTargets = targets.filter(t => !t.isLocked);
         if (deletableTargets.length === 0) return;
 
@@ -332,7 +404,7 @@
         saveUserData(nextTodos);
       };
 
-      // 覚え書きメモ機能
+      // メモ機能
       const handleAddMemo = (targetDate = null) => {
         if (!newQuickMemo.trim()) return;
         const newMemoItem = {
@@ -464,21 +536,23 @@
         saveUserData(undefined, undefined, undefined, code);
       };
 
+      const handleSavePayday = (pd) => {
+        setPayday(pd);
+        saveUserData(undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, pd);
+      };
+
       // 日付関連計算
       const todayObj = new Date();
       const todayStr = todayObj.toISOString().split('T')[0];
+      const todayDayNum = todayObj.getDate().toString();
 
-      // Smart フィルタリング & ソート
+      // フィルター＆ソート
       const currentListTodos = todos.filter(t => t.listId === selectedListId);
-      
       const filteredTodos = currentListTodos.filter(t => {
-        // 1. 文字検索
         const matchesSearch = t.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
                               t.detail.toLowerCase().includes(searchQuery.toLowerCase());
-        // 2. タグ検索
         const matchesTag = selectedTagFilter === 'すべて' || (t.tags && t.tags.includes(selectedTagFilter));
 
-        // 3. 期間検索
         let matchesDate = true;
         if (selectedDateFilter === 'today') {
           matchesDate = t.hasDate !== false && t.startDate <= todayStr && t.endDate >= todayStr;
@@ -500,12 +574,16 @@
           if (!b.hasDate) return -1;
           return a.startDate.localeCompare(b.startDate);
         } else {
-          return b.id.localeCompare(a.id); // 作成順 (Newest)
+          return b.id.localeCompare(a.id);
         }
       });
 
       const todayTodos = currentListTodos.filter(t => t.hasDate !== false && t.startDate <= todayStr && t.endDate >= todayStr);
       const todayMemos = memos.filter(m => !m.date || m.date === todayStr);
+      const todayEvents = events.filter(e => e.date === todayStr);
+      const todayHolidays = holidays.filter(h => h.date === todayStr);
+      const isTodayPayday = todayDayNum === payday;
+
       const overdueTodos = currentListTodos.filter(t => t.hasDate !== false && t.endDate < todayStr && !t.completed);
 
       const dayOfWeekStr = ['日', '月', '火', '水', '木', '金', '土'][todayObj.getDay()];
@@ -523,6 +601,16 @@
         const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
         calendarDays.push({ day: i, dateStr });
       }
+
+      // カテゴリアイコン
+      const getEventCategoryIcon = (cat) => {
+        switch (cat) {
+          case 'birthday': return '🎂';
+          case 'live': return '🎤';
+          case 'travel': return '✈️';
+          case 'event': default: return '🎉';
+        }
+      };
 
       // 未ログイン画面
       if (!isLoggedIn) {
@@ -616,6 +704,14 @@
             {/* 右側アクション */}
             <div className="flex items-center gap-2">
               <button
+                onClick={() => setIsEventModalOpen(true)}
+                className="px-2 py-1 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg border border-emerald-200 flex items-center gap-1 font-bold transition"
+                title="イベント・休日を登録"
+              >
+                <span>🎉 予定・休日</span>
+              </button>
+
+              <button
                 onClick={() => setIsSettingsOpen(true)}
                 className="p-1.5 text-slate-500 hover:bg-slate-100 rounded-lg border border-slate-200 transition"
                 title="設定"
@@ -681,21 +777,46 @@
             {activeTab === 'today' && (
               <div className="space-y-3.5">
                 {/* 今日情報 ＆ 天気カード */}
-                <div className="bg-white rounded-2xl border border-slate-200/80 p-3.5 shadow-sm flex items-center justify-between">
-                  <div>
-                    <span className="text-[10px] font-extrabold text-indigo-600 tracking-wider uppercase">TODAY'S SCHEDULE</span>
-                    <div className="text-base font-black text-slate-800 mt-0.5">{formattedToday}</div>
-                  </div>
+                <div className="bg-white rounded-2xl border border-slate-200/80 p-3.5 shadow-sm space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="text-[10px] font-extrabold text-indigo-600 tracking-wider uppercase">TODAY'S SCHEDULE</span>
+                      <div className="text-base font-black text-slate-800 mt-0.5">{formattedToday}</div>
+                    </div>
 
-                  <div className="flex items-center gap-2.5 bg-gradient-to-r from-slate-50 to-indigo-50/30 px-3 py-1.5 rounded-xl border border-slate-100">
-                    <span className="text-xl">{weather.icon}</span>
-                    <div className="text-right">
-                      <div className="text-[11px] font-extrabold text-slate-700">{weather.text}</div>
-                      <div className="text-[9px] text-slate-400 font-medium">
-                        {PREFECTURES.find(p => p.code === locationCode)?.name || '選択地域'}
+                    <div className="flex items-center gap-2.5 bg-gradient-to-r from-slate-50 to-indigo-50/30 px-3 py-1.5 rounded-xl border border-slate-100">
+                      <span className="text-xl">{weather.icon}</span>
+                      <div className="text-right">
+                        <div className="text-[11px] font-extrabold text-slate-700">{weather.text}</div>
+                        <div className="text-[9px] text-slate-400 font-medium">
+                          {PREFECTURES.find(p => p.code === locationCode)?.name || '選択地域'}
+                        </div>
                       </div>
                     </div>
                   </div>
+
+                  {/* 本日の特別情報 (イベント・給料日・休日) */}
+                  {(todayEvents.length > 0 || todayHolidays.length > 0 || isTodayPayday) && (
+                    <div className="pt-2 border-t border-slate-100 flex flex-wrap gap-1.5">
+                      {isTodayPayday && (
+                        <span className="bg-emerald-100 text-emerald-800 font-extrabold text-[10px] px-2 py-0.5 rounded-lg flex items-center gap-1">
+                          💰 本日は給料日です！
+                        </span>
+                      )}
+                      {todayEvents.map(ev => (
+                        <span key={ev.id} className="bg-purple-100 text-purple-800 font-bold text-[10px] px-2 py-0.5 rounded-lg flex items-center gap-1">
+                          {getEventCategoryIcon(ev.category)} {ev.title}
+                          <button onClick={() => deleteEvent(ev.id)} className="hover:text-rose-600 ml-1">×</button>
+                        </span>
+                      ))}
+                      {todayHolidays.map(hol => (
+                        <span key={hol.id} className="bg-amber-100 text-amber-800 font-bold text-[10px] px-2 py-0.5 rounded-lg flex items-center gap-1">
+                          🏖️ {hol.memberName} のお休み
+                          <button onClick={() => deleteHoliday(hol.id)} className="hover:text-rose-600 ml-1">×</button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 {/* 遅延タスク */}
@@ -769,10 +890,10 @@
                             <button onClick={() => toggleLockTodo(todo.id)} className="text-slate-400 hover:text-indigo-600 p-1 rounded hover:bg-slate-100" title={todo.isLocked ? "ロック解除" : "ロックする"}>
                               {todo.isLocked ? "🔒" : "🔓"}
                             </button>
-                            <button onClick={() => openModalForEdit(todo)} className="text-slate-400 hover:text-indigo-600 p-1 rounded hover:bg-slate-100">
+                            <button onClick={() => openModalForEdit(todo)} className="text-slate-400 hover:text-indigo-600 p-1.5 rounded-lg hover:bg-slate-100">
                               <i data-lucide="edit-3" className="w-3.5 h-3.5"></i>
                             </button>
-                            <button onClick={() => deleteTodo(todo.id)} className="text-slate-400 hover:text-rose-600 p-1 rounded hover:bg-slate-100">
+                            <button onClick={() => deleteTodo(todo.id)} className="text-slate-400 hover:text-rose-600 p-1.5 rounded-lg hover:bg-slate-100">
                               <i data-lucide="trash-2" className="w-3.5 h-3.5"></i>
                             </button>
                           </div>
@@ -842,12 +963,10 @@
               </div>
             )}
 
-            {/* TAB 2: すべてのToDo (高度検索・ソート・一括削除対応) */}
+            {/* TAB 2: すべてのToDo */}
             {activeTab === 'todos' && (
               <div className="space-y-3">
-                {/* 検索・フィルターコントロールパネル */}
                 <div className="bg-white p-3 rounded-2xl border border-slate-200/80 shadow-xs space-y-2">
-                  {/* 1. 文字検索入力 */}
                   <div className="relative">
                     <input
                       type="text"
@@ -858,10 +977,8 @@
                     />
                   </div>
 
-                  {/* 2. 期間・ソート・一括削除コントロール */}
                   <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
                     <div className="flex items-center gap-1.5 flex-wrap">
-                      {/* 期間フィルター */}
                       <select
                         value={selectedDateFilter}
                         onChange={(e) => setSelectedDateFilter(e.target.value)}
@@ -873,7 +990,6 @@
                         <option value="no_date">📅 期間: 期限なし</option>
                       </select>
 
-                      {/* ソート順 */}
                       <select
                         value={sortBy}
                         onChange={(e) => setSortBy(e.target.value)}
@@ -885,7 +1001,6 @@
                       </select>
                     </div>
 
-                    {/* 選択項目一括削除 */}
                     {selectedTodoIds.length > 0 && (
                       <button
                         onClick={handleBulkDelete}
@@ -897,7 +1012,6 @@
                     )}
                   </div>
 
-                  {/* 3. タグフィルター */}
                   {tags.length > 0 && (
                     <div className="flex items-center gap-1 overflow-x-auto pt-1 border-t border-slate-100">
                       <span className="text-[10px] text-slate-400 font-bold whitespace-nowrap">タグ:</span>
@@ -924,7 +1038,6 @@
                   )}
                 </div>
 
-                {/* ToDoリスト一覧 */}
                 <div className="space-y-2">
                   {filteredTodos.length === 0 ? (
                     <div className="bg-white p-8 rounded-2xl border border-slate-200/80 text-center text-slate-400 text-xs">
@@ -944,13 +1057,11 @@
                         >
                           <div className="flex items-start justify-between gap-2.5">
                             <div className="flex items-start gap-2.5 flex-1 min-w-0">
-                              {/* 一括選択用チェックボックス */}
                               <input
                                 type="checkbox"
                                 checked={isSelected}
                                 onChange={() => toggleTodoSelect(todo.id)}
                                 className="mt-0.5 w-4 h-4 text-indigo-600 rounded border-slate-300 cursor-pointer"
-                                title="一括操作対象に選択"
                               />
 
                               <div className="flex-1 min-w-0">
@@ -966,7 +1077,7 @@
                                       <i data-lucide="alert-circle" className="w-3 h-3"></i> 必須
                                     </span>
                                   )}
-                                  {todo.isLocked && <span className="text-slate-400" title="ロック中（一括削除から守られています）">🔒</span>}
+                                  {todo.isLocked && <span className="text-slate-400" title="ロック中">🔒</span>}
                                 </div>
                                 {todo.detail && <p className="text-[11px] text-slate-500 truncate mt-1">{todo.detail}</p>}
                                 <div className="flex items-center gap-2.5 mt-1.5 text-[10px] text-slate-400 font-medium">
@@ -981,7 +1092,6 @@
                               <button
                                 onClick={() => toggleLockTodo(todo.id)}
                                 className="text-slate-400 hover:text-indigo-600 p-1 rounded hover:bg-slate-100"
-                                title={todo.isLocked ? "ロック解除" : "誤削除を防ぐロック"}
                               >
                                 {todo.isLocked ? "🔒" : "🔓"}
                               </button>
@@ -1051,7 +1161,6 @@
                           <button
                             onClick={() => promoteMemoToTodo(memo)}
                             className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-2.5 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 transition"
-                            title="ToDo（予定）としてカレンダーに落とし込む"
                           >
                             <i data-lucide="calendar-plus" className="w-3.5 h-3.5"></i> カレンダーに予定化
                           </button>
@@ -1067,7 +1176,7 @@
             )}
           </main>
 
-          {/* カレンダーモーダル */}
+          {/* カレンダーモーダル (イベント・休日・給料日表示) */}
           {isCalendarOpen && (
             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 z-50">
               <div className="bg-white rounded-2xl w-full max-w-md p-4 shadow-2xl border border-slate-100">
@@ -1094,22 +1203,42 @@
 
                 <div className="grid grid-cols-7 gap-1">
                   {calendarDays.map((item, index) => {
-                    if (!item) return <div key={`empty-${index}`} className="h-14 bg-slate-50/50 rounded-lg"></div>;
+                    if (!item) return <div key={`empty-${index}`} className="h-16 bg-slate-50/50 rounded-lg"></div>;
                     const dayTodos = currentListTodos.filter(t => t.hasDate !== false && t.startDate <= item.dateStr && t.endDate >= item.dateStr);
                     const dayMemoCount = memos.filter(m => m.date === item.dateStr).length;
+                    const dayEvs = events.filter(e => e.date === item.dateStr);
+                    const dayHols = holidays.filter(h => h.date === item.dateStr);
+                    const isPay = item.day.toString() === payday;
 
                     return (
                       <div
                         key={item.dateStr}
                         onClick={() => openModalForCreateFromDate(item.dateStr)}
-                        className="h-14 border border-slate-200/80 bg-white rounded-lg p-1 flex flex-col justify-between hover:border-indigo-400 transition cursor-pointer group"
+                        className="h-16 border border-slate-200/80 bg-white rounded-lg p-1 flex flex-col justify-between hover:border-indigo-400 transition cursor-pointer group"
                       >
                         <div className="flex items-center justify-between">
-                          <span className="text-[10px] font-bold text-slate-700">{item.day}</span>
-                          {dayMemoCount > 0 && <span className="text-[8px] bg-amber-100 text-amber-800 font-extrabold px-1 rounded">📌{dayMemoCount}</span>}
+                          <span className={`text-[10px] font-bold ${isPay ? 'text-emerald-700 bg-emerald-100 px-1 rounded' : 'text-slate-700'}`}>
+                            {item.day} {isPay && '💰'}
+                          </span>
+                          {dayMemoCount > 0 && <span className="text-[8px] bg-amber-100 text-amber-800 font-extrabold px-1 rounded">📌</span>}
                         </div>
 
                         <div className="space-y-0.5 overflow-y-auto">
+                          {/* 休日バッジ */}
+                          {dayHols.map(hol => (
+                            <div key={hol.id} className="text-[8px] px-1 bg-amber-200 text-amber-900 rounded font-bold truncate">
+                              🏖️ {hol.memberName}休
+                            </div>
+                          ))}
+
+                          {/* イベントバッジ */}
+                          {dayEvs.map(ev => (
+                            <div key={ev.id} className="text-[8px] px-1 bg-purple-100 text-purple-800 rounded font-bold truncate">
+                              {getEventCategoryIcon(ev.category)} {ev.title}
+                            </div>
+                          ))}
+
+                          {/* ToDoバッジ */}
                           {dayTodos.map(todo => (
                             <div
                               key={todo.id}
@@ -1120,7 +1249,6 @@
                               className={`text-[8px] px-1 py-0.5 rounded truncate font-bold cursor-pointer transition shadow-2xs ${
                                 todo.isEssential ? 'bg-red-600 text-white' : 'bg-slate-100 text-slate-700'
                               } ${todo.completed ? 'line-through opacity-40' : ''}`}
-                              title={todo.title}
                             >
                               {todo.title}
                             </div>
@@ -1130,6 +1258,118 @@
                     );
                   })}
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* イベント / 休日登録モーダル */}
+          {isEventModalOpen && (
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 z-50">
+              <div className="bg-white rounded-2xl w-full max-w-sm p-4 shadow-2xl border border-slate-100 space-y-3">
+                <div className="flex items-center justify-between border-b pb-2">
+                  <h2 className="text-xs font-bold text-slate-800">🎉 イベント・休日設定</h2>
+                  <button onClick={() => setIsEventModalOpen(false)} className="text-slate-400 p-0.5">
+                    <i data-lucide="x" className="w-4 h-4"></i>
+                  </button>
+                </div>
+
+                {/* タイプ切替 */}
+                <div className="flex bg-slate-100 p-1 rounded-xl font-bold">
+                  <button
+                    type="button"
+                    onClick={() => setEventFormType('event')}
+                    className={`flex-1 py-1 rounded-lg transition ${eventFormType === 'event' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-500'}`}
+                  >
+                    特別イベント (ライブ/誕生日)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEventFormType('holiday')}
+                    className={`flex-1 py-1 rounded-lg transition ${eventFormType === 'holiday' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-500'}`}
+                  >
+                    休日設定 (メンバー別)
+                  </button>
+                </div>
+
+                <form onSubmit={handleSaveEventOrHoliday} className="space-y-2.5 pt-1">
+                  <div>
+                    <label className="block text-[9px] font-bold text-slate-400 mb-0.5">対象日付</label>
+                    <input
+                      type="date"
+                      value={eventDate}
+                      onChange={(e) => setEventDate(e.target.value)}
+                      className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-base outline-none bg-white font-bold"
+                      required
+                    />
+                  </div>
+
+                  {eventFormType === 'event' ? (
+                    <>
+                      <div>
+                        <label className="block text-[9px] font-bold text-slate-400 mb-0.5">カテゴリ</label>
+                        <select
+                          value={eventCategory}
+                          onChange={(e) => setEventCategory(e.target.value)}
+                          className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-base bg-white font-bold"
+                        >
+                          <option value="event">🎉 イベント / 記念日</option>
+                          <option value="birthday">🎂 誕生日</option>
+                          <option value="live">🎤 ライブ / コンサート</option>
+                          <option value="travel">✈️ 旅行 / 出張</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[9px] font-bold text-slate-400 mb-0.5">イベント名</label>
+                        <input
+                          type="text"
+                          value={eventTitle}
+                          onChange={(e) => setEventTitle(e.target.value)}
+                          className="w-full px-3 py-2 border border-slate-200 rounded-lg text-base outline-none font-bold"
+                          placeholder="例: ○○ライブ、家族で旅行..."
+                          required
+                        />
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div>
+                        <label className="block text-[9px] font-bold text-slate-400 mb-0.5">お休みのメンバー</label>
+                        <select
+                          value={holidayMember}
+                          onChange={(e) => setHolidayMember(e.target.value)}
+                          className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-base bg-white font-bold mb-2"
+                        >
+                          {memberNames.map(m => (
+                            <option key={m} value={m}>{m}</option>
+                          ))}
+                        </select>
+
+                        <div className="flex gap-1">
+                          <input
+                            type="text"
+                            placeholder="メンバー追加..."
+                            value={newMemberInput}
+                            onChange={(e) => setNewMemberInput(e.target.value)}
+                            className="flex-1 px-2 py-1 border border-slate-200 rounded-lg text-base"
+                          />
+                          <button
+                            type="button"
+                            onClick={handleAddMember}
+                            className="bg-slate-100 px-2 py-1 rounded-lg text-[10px] font-bold"
+                          >
+                            追加
+                          </button>
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  <div className="flex justify-end gap-1.5 pt-2 border-t">
+                    <button type="button" onClick={() => setIsEventModalOpen(false)} className="px-3 py-1.5 border rounded-lg text-xs font-bold">キャンセル</button>
+                    <button type="submit" className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold">登録する</button>
+                  </div>
+                </form>
               </div>
             </div>
           )}
@@ -1171,7 +1411,7 @@
                     placeholder="詳細メモ..."
                   />
 
-                  {/* 期間指定の有無 */}
+                  {/* 期間指定 */}
                   <div className="bg-slate-50 p-2 rounded-xl border border-slate-200/60 space-y-2">
                     <div className="flex items-center justify-between">
                       <label className="text-[10px] font-bold text-slate-600">期間（期限）を設定する</label>
@@ -1206,7 +1446,7 @@
                     )}
                   </div>
 
-                  {/* 時間指定の有無 */}
+                  {/* 時間指定 */}
                   <div className="bg-slate-50 p-2 rounded-xl border border-slate-200/60 space-y-2">
                     <div className="flex items-center justify-between">
                       <label className="text-[10px] font-bold text-slate-600">時間を指定する</label>
@@ -1229,7 +1469,6 @@
                     )}
                   </div>
 
-                  {/* フラグ（必須・ロック） */}
                   <div className="flex items-center justify-between pt-1">
                     <label className="flex items-center gap-1.5 cursor-pointer">
                       <input
@@ -1318,6 +1557,23 @@
                       <option key={p.code} value={p.code}>{p.name}</option>
                     ))}
                   </select>
+                </div>
+
+                {/* 給料日の設定 */}
+                <div className="space-y-1.5">
+                  <label className="block text-[10px] font-bold text-slate-500">毎月の給料日の設定</label>
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs">毎月</span>
+                    <input
+                      type="number"
+                      min="1"
+                      max="31"
+                      value={payday}
+                      onChange={(e) => handleSavePayday(e.target.value)}
+                      className="w-16 px-2 py-1 border border-slate-200 rounded-lg text-xs font-bold outline-none"
+                    />
+                    <span className="text-xs">日</span>
+                  </div>
                 </div>
 
                 {/* ゴミ箱管理ボタン */}
