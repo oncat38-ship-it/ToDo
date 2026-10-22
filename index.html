@@ -864,8 +864,8 @@
                       <span>💼 本日の仕事時間: {todayWorkHours.start} 〜 {todayWorkHours.end}</span>
                     </div>
                   ) : (
-                    <div className="bg-blue-500/5 border border-blue-500/20 rounded-2xl p-2.5 flex items-center justify-between text-blue-600 font-bold text-xs">
-                      <span>💼 本日の仕事時間 (デフォルト): {defaultWorkStart} 〜 {defaultWorkEnd}</span>
+                    <div className="bg-slate-100 border border-slate-200 rounded-2xl p-2.5 flex items-center justify-between text-slate-500 font-bold text-xs">
+                      <span>💼 本日の仕事時間: 未設定</span>
                     </div>
                   )}
 
@@ -1062,7 +1062,7 @@
             </div>
           )}
 
-          {/* カレンダー日付詳細ポップアップ (スマートコンパクト版) */}
+          {/* カレンダー日付詳細ポップアップ */}
           {selectedDayDetailDate && (() => {
             const dateStr = selectedDayDetailDate;
             const dayTodos = currentListTodos.filter(t => isTodoActiveOnDate(t, dateStr));
@@ -1087,7 +1087,9 @@
                           if (dayWork) { setWorkStartInput(dayWork.start); setWorkEndInput(dayWork.end); }
                           else { setWorkStartInput(defaultWorkStart); setWorkEndInput(defaultWorkEnd); }
                           setIsEditingWorkHours(true);
-                        }} className="text-[10px] font-bold text-blue-600 bg-white px-2 py-0.5 rounded-lg border border-blue-200">変更</button>
+                        }} className="text-[10px] font-bold text-blue-600 bg-white px-2 py-0.5 rounded-lg border border-blue-200">
+                          {dayWork ? "変更" : "設定"}
+                        </button>
                       ) : (
                         <button onClick={() => setIsEditingWorkHours(false)} className="text-[10px] font-bold text-slate-500">キャンセル</button>
                       )}
@@ -1095,7 +1097,7 @@
 
                     {!isEditingWorkHours ? (
                       <div className="text-[11px] font-bold text-blue-950">
-                        {dayWork ? `${dayWork.start} 〜 ${dayWork.end}` : `テンプレ (${defaultWorkStart} 〜 ${defaultWorkEnd})`}
+                        {dayWork ? `${dayWork.start} 〜 ${dayWork.end}` : <span className="opacity-50 font-normal">未設定</span>}
                       </div>
                     ) : (
                       <div className="space-y-1.5 pt-1">
@@ -1106,7 +1108,7 @@
                         </div>
                         <div className="flex gap-1.5 pt-0.5">
                           <button onClick={() => handleSaveWorkHours(dateStr)} className="bg-blue-600 text-white px-2.5 py-1 rounded-lg text-[10px] font-bold flex-1">保存</button>
-                          {dayWork && <button onClick={() => handleClearWorkHours(dateStr)} className="bg-rose-500/10 text-rose-600 px-2.5 py-1 rounded-lg text-[10px] font-bold">リセット</button>}
+                          {dayWork && <button onClick={() => handleClearWorkHours(dateStr)} className="bg-rose-500/10 text-rose-600 px-2.5 py-1 rounded-lg text-[10px] font-bold">削除</button>}
                         </div>
                       </div>
                     )}
@@ -1149,7 +1151,7 @@
             );
           })()}
 
-          {/* Todo作成・編集モーダル (フル仕様復元版) */}
+          {/* Todo作成・編集モーダル */}
           {isModalOpen && (
             <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-3 z-50">
               <div className="bg-white rounded-3xl w-full max-w-sm p-5 shadow-2xl border max-h-[90vh] overflow-y-auto space-y-3.5 animate-modal">
@@ -1270,7 +1272,7 @@
             </div>
           )}
 
-          {/* 予定・休日追加モーダル (フル仕様復元版) */}
+          {/* 予定・休日追加モーダル */}
           {isEventModalOpen && (
             <div className="fixed inset-0 bg-slate-950/70 flex items-center justify-center p-3 z-50">
               <div className="bg-white rounded-3xl w-full max-w-sm p-5 shadow-2xl border space-y-3.5">
@@ -1387,7 +1389,7 @@
                       <span className="font-bold text-slate-500">〜</span>
                       <input type="time" value={defaultWorkEnd} onChange={(e) => handleSaveDefaultWorkTemplate(defaultWorkStart, e.target.value)} className="flex-1 px-3 py-2 border rounded-xl text-xs font-bold text-center" />
                     </div>
-                    <p className="text-[10px] opacity-60 leading-relaxed">個別設定していない日のカレンダーや詳細を開いたときに、この時間が初期値として表示されます。</p>
+                    <p className="text-[10px] opacity-60 leading-relaxed">ここでの時間はテンプレとしての保持用です。個別に日付を開いて「保存」を押すまではカレンダー等には自動登録されません。</p>
                   </div>
                 )}
 
