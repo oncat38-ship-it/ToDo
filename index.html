@@ -841,11 +841,11 @@
 
                   {todayWorkHours ? (
                     <div className="bg-blue-500/10 border border-blue-500/30 rounded-2xl p-2.5 flex items-center justify-between text-blue-700 font-bold text-xs">
-                      <span>💼 本日の活動・仕事時間: {todayWorkHours.start} 〜 {todayWorkHours.end}</span>
+                      <span>💼 本日の仕事時間: {todayWorkHours.start} 〜 {todayWorkHours.end}</span>
                     </div>
                   ) : (
                     <div className="bg-blue-500/5 border border-blue-500/20 rounded-2xl p-2.5 flex items-center justify-between text-blue-600 font-bold text-xs">
-                      <span>💼 本日の仕事時間 (テンプレート): {defaultWorkStart} 〜 {defaultWorkEnd}</span>
+                      <span>💼 本日の仕事時間 (デフォルト): {defaultWorkStart} 〜 {defaultWorkEnd}</span>
                     </div>
                   )}
 
@@ -1025,11 +1025,7 @@
                         </div>
 
                         <div className="space-y-0.5 overflow-hidden flex-1 mt-0.5">
-                          {dayWork ? (
-                            <div className="text-[8px] bg-blue-100 text-blue-800 font-bold px-1 rounded truncate">💼 {dayWork.start}-{dayWork.end}</div>
-                          ) : (
-                            <div className="text-[8px] bg-blue-50 text-blue-600 font-medium px-1 rounded truncate opacity-70">💼 {defaultWorkStart}-{defaultWorkEnd}</div>
-                          )}
+                          {dayWork && <div className="text-[8px] bg-blue-100 text-blue-800 font-bold px-1 rounded truncate">💼 {dayWork.start}-{dayWork.end}</div>}
                           {dayHols.map(hol => <div key={hol.id} className="text-[9px] px-1 bg-amber-200 text-amber-900 rounded font-bold truncate">🏖️ {hol.memberName}</div>)}
                           {dayEvs.map(ev => <div key={ev.id} className="text-[9px] px-1 bg-purple-100 text-purple-800 rounded font-bold truncate">{ev.icon || '🎉'} {ev.title}</div>)}
                           {dayTodos.map(todo => (
@@ -1046,7 +1042,7 @@
             </div>
           )}
 
-          {/* カレンダー日付詳細ポップアップ */}
+          {/* カレンダー日付詳細ポップアップ (スマートコンパクト版) */}
           {selectedDayDetailDate && (() => {
             const dateStr = selectedDayDetailDate;
             const dayTodos = currentListTodos.filter(t => isTodoActiveOnDate(t, dateStr));
@@ -1055,74 +1051,78 @@
             const dayWork = workHours[dateStr];
 
             return (
-              <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-3 z-50">
-                <div className="bg-white text-slate-900 rounded-3xl w-full max-w-sm p-5 shadow-2xl border space-y-3.5 max-h-[85vh] flex flex-col animate-modal">
-                  <div className="flex items-center justify-between border-b pb-2.5">
-                    <h3 className="font-extrabold text-xs">📅 {dateStr} の詳細</h3>
+              <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-3 z-50">
+                <div className="bg-white text-slate-900 rounded-3xl w-full max-w-xs p-4 shadow-2xl border space-y-3 animate-modal">
+                  <div className="flex items-center justify-between border-b pb-2">
+                    <h3 className="font-extrabold text-xs">📅 {dateStr}</h3>
                     <button onClick={() => setSelectedDayDetailDate(null)} className="opacity-60 hover:opacity-100 p-1"><i data-lucide="x" className="w-4 h-4"></i></button>
                   </div>
 
-                  {/* 仕事・活動時間ブロック */}
-                  <div className="bg-blue-50/80 border border-blue-200 p-3 rounded-2xl space-y-2">
+                  {/* コンパクトな仕事時間ブロック */}
+                  <div className="bg-blue-50/80 border border-blue-200 p-2.5 rounded-xl space-y-1.5">
                     <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-extrabold text-blue-900">💼 仕事・活動時間</span>
+                      <span className="text-[10px] font-extrabold text-blue-900">💼 仕事時間</span>
                       {!isEditingWorkHours ? (
                         <button onClick={() => {
                           if (dayWork) { setWorkStartInput(dayWork.start); setWorkEndInput(dayWork.end); }
                           else { setWorkStartInput(defaultWorkStart); setWorkEndInput(defaultWorkEnd); }
                           setIsEditingWorkHours(true);
-                        }} className="text-[10px] font-bold text-blue-600 bg-white px-2 py-0.5 rounded-lg border border-blue-200 shadow-2xs">変更</button>
+                        }} className="text-[10px] font-bold text-blue-600 bg-white px-2 py-0.5 rounded-lg border border-blue-200">変更</button>
                       ) : (
                         <button onClick={() => setIsEditingWorkHours(false)} className="text-[10px] font-bold text-slate-500">キャンセル</button>
                       )}
                     </div>
 
                     {!isEditingWorkHours ? (
-                      <div className="text-xs font-bold text-blue-950 py-1">
-                        {dayWork ? `${dayWork.start} 〜 ${dayWork.end}` : `テンプレート適用中 (${defaultWorkStart} 〜 ${defaultWorkEnd})`}
+                      <div className="text-[11px] font-bold text-blue-950">
+                        {dayWork ? `${dayWork.start} 〜 ${dayWork.end}` : `テンプレ (${defaultWorkStart} 〜 ${defaultWorkEnd})`}
                       </div>
                     ) : (
-                      <div className="space-y-2 pt-1">
-                        <div className="flex items-center gap-1.5">
-                          <input type="time" value={workStartInput} onChange={(e) => setWorkStartInput(e.target.value)} className="bg-white border border-blue-200 rounded-xl px-2 py-1 text-xs font-bold" />
-                          <span className="text-xs font-bold text-blue-900">〜</span>
-                          <input type="time" value={workEndInput} onChange={(e) => setWorkEndInput(e.target.value)} className="bg-white border border-blue-200 rounded-xl px-2 py-1 text-xs font-bold" />
+                      <div className="space-y-1.5 pt-1">
+                        <div className="flex items-center gap-1">
+                          <input type="time" value={workStartInput} onChange={(e) => setWorkStartInput(e.target.value)} className="bg-white border border-blue-200 rounded-lg px-2 py-0.5 text-[11px] font-bold flex-1" />
+                          <span className="font-bold text-blue-900">〜</span>
+                          <input type="time" value={workEndInput} onChange={(e) => setWorkEndInput(e.target.value)} className="bg-white border border-blue-200 rounded-lg px-2 py-0.5 text-[11px] font-bold flex-1" />
                         </div>
-                        <div className="flex gap-2 pt-1">
-                          <button onClick={() => handleSaveWorkHours(dateStr)} className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1 rounded-xl text-[10px] font-bold shadow-xs flex-1">保存</button>
-                          {dayWork && <button onClick={() => handleClearWorkHours(dateStr)} className="bg-rose-500/20 text-rose-600 px-3 py-1 rounded-xl text-[10px] font-bold">テンプレートに戻す</button>}
+                        <div className="flex gap-1.5 pt-0.5">
+                          <button onClick={() => handleSaveWorkHours(dateStr)} className="bg-blue-600 text-white px-2.5 py-1 rounded-lg text-[10px] font-bold flex-1">保存</button>
+                          {dayWork && <button onClick={() => handleClearWorkHours(dateStr)} className="bg-rose-500/10 text-rose-600 px-2.5 py-1 rounded-lg text-[10px] font-bold">リセット</button>}
                         </div>
                       </div>
                     )}
                   </div>
 
-                  <div className="space-y-2 overflow-y-auto flex-1 pr-1">
+                  {/* 予定・タスク一覧 */}
+                  <div className="space-y-1.5 max-h-48 overflow-y-auto pr-0.5 text-xs">
                     {dayEvs.map(ev => (
-                      <div key={ev.id} className="bg-purple-500/10 p-2.5 rounded-2xl flex items-center justify-between">
-                        <span className="font-bold text-xs truncate flex-1">{ev.icon || '🎉'} {ev.title}</span>
-                        <button onClick={() => deleteEvent(ev.id)} className="text-rose-500 text-[10px] font-bold">削除</button>
+                      <div key={ev.id} className="bg-purple-500/10 p-2 rounded-xl flex items-center justify-between">
+                        <span className="font-bold truncate flex-1">{ev.icon || '🎉'} {ev.title}</span>
+                        <button onClick={() => deleteEvent(ev.id)} className="text-rose-500 text-[10px] font-bold ml-1">削除</button>
                       </div>
                     ))}
                     {dayHols.map(hol => (
-                      <div key={hol.id} className="bg-amber-500/10 p-2.5 rounded-2xl flex items-center justify-between">
-                        <span className="font-bold text-xs truncate flex-1">🏖️ {hol.memberName} のお休み</span>
-                        <button onClick={() => deleteHoliday(hol.id)} className="text-rose-500 text-[10px] font-bold">削除</button>
+                      <div key={hol.id} className="bg-amber-500/10 p-2 rounded-xl flex items-center justify-between">
+                        <span className="font-bold truncate flex-1">🏖️ {hol.memberName}休み</span>
+                        <button onClick={() => deleteHoliday(hol.id)} className="text-rose-500 text-[10px] font-bold ml-1">削除</button>
                       </div>
                     ))}
                     {dayTodos.map(todo => (
-                      <div key={todo.id} className="bg-black/5 p-2.5 rounded-2xl flex items-center justify-between">
-                        <span className={`font-bold text-xs truncate flex-1 ${todo.completed ? 'line-through opacity-40' : ''}`}>📝 {todo.title}</span>
-                        <button onClick={() => deleteTodo(todo.id)} className="text-rose-500 text-[10px] font-bold">削除</button>
+                      <div key={todo.id} className="bg-black/5 p-2 rounded-xl flex items-center justify-between">
+                        <span className={`font-bold truncate flex-1 ${todo.completed ? 'line-through opacity-40' : ''}`}>📝 {todo.title}</span>
+                        <button onClick={() => deleteTodo(todo.id)} className="text-rose-500 text-[10px] font-bold ml-1">削除</button>
                       </div>
                     ))}
+                    {dayEvs.length === 0 && dayHols.length === 0 && dayTodos.length === 0 && (
+                      <div className="text-center opacity-40 py-2 text-[11px]">予定はありません</div>
+                    )}
                   </div>
 
-                  <div className="pt-2 border-t space-y-2 shrink-0">
-                    <div className="flex gap-2">
-                      <button onClick={() => { const target = selectedDayDetailDate; setSelectedDayDetailDate(null); openModalForCreateFromDate(target); }} className="bg-indigo-600 text-white px-3 py-2 rounded-xl text-xs font-bold flex-1">＋ ToDo追加</button>
-                      <button onClick={() => { const target = selectedDayDetailDate; setSelectedDayDetailDate(null); openEventModalFromDate(target); }} className="bg-purple-600 text-white px-3 py-2 rounded-xl text-xs font-bold flex-1">🎉 予定追加</button>
+                  <div className="pt-2 border-t space-y-1.5">
+                    <div className="flex gap-1.5">
+                      <button onClick={() => { const target = selectedDayDetailDate; setSelectedDayDetailDate(null); openModalForCreateFromDate(target); }} className="bg-indigo-600 text-white px-2 py-1.5 rounded-xl text-[11px] font-bold flex-1">＋ ToDo</button>
+                      <button onClick={() => { const target = selectedDayDetailDate; setSelectedDayDetailDate(null); openEventModalFromDate(target); }} className="bg-purple-600 text-white px-2 py-1.5 rounded-xl text-[11px] font-bold flex-1">🎉 予定</button>
                     </div>
-                    <button onClick={() => setSelectedDayDetailDate(null)} className="w-full py-2 border rounded-xl text-xs font-bold">閉じる</button>
+                    <button onClick={() => setSelectedDayDetailDate(null)} className="w-full py-1.5 border rounded-xl text-[11px] font-bold">閉じる</button>
                   </div>
                 </div>
               </div>
@@ -1237,7 +1237,7 @@
                       <span className="font-bold text-slate-500">〜</span>
                       <input type="time" value={defaultWorkEnd} onChange={(e) => handleSaveDefaultWorkTemplate(defaultWorkStart, e.target.value)} className="flex-1 px-3 py-2 border rounded-xl text-xs font-bold text-center" />
                     </div>
-                    <p className="text-[10px] opacity-60 leading-relaxed">個別設定していない日のカレンダーに、この時間がデフォルトで表示されます。</p>
+                    <p className="text-[10px] opacity-60 leading-relaxed">個別設定していない日のカレンダーや詳細を開いたときに、この時間が初期値として表示されます。</p>
                   </div>
                 )}
 
