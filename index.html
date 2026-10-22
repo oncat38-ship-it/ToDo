@@ -23,7 +23,6 @@
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
       transition: background-color 0.3s, color 0.3s;
     }
-    /* テーマカスタマイズ */
     body.theme-simple {
       background-color: #f8fafc;
       color: #334155;
@@ -443,7 +442,7 @@
         setIsModalOpen(true);
       };
 
-      // カレンダーポップアップから直接指定日でTodoを作成する
+      // 指定日でTodoを作成
       const openModalForCreateFromDate = (targetDateStr) => {
         if (!selectedListId && lists.length === 0) { alert('先にリストを作成してください。'); setIsNewListModalOpen(true); return; }
         setEditingTodo(null);
@@ -454,6 +453,15 @@
         setFormHasTime(false); setFormTime('09:00');
         setFormIsEssential(false); setFormIsLocked(false); setFormTags([]);
         setIsModalOpen(true);
+      };
+
+      // 指定日でイベント作成モーダルを開く
+      const openEventModalFromDate = (targetDateStr) => {
+        setEditingEvent(null);
+        setEditingHoliday(null);
+        setEventTitle('');
+        setEventDate(targetDateStr);
+        setIsEventModalOpen(true);
       };
 
       const openModalForCreate = () => {
@@ -574,12 +582,14 @@
       // テーマ別拡張デザインスタイル
       const getThemeClasses = () => {
         if (theme === 'animal') return {
-          headerBg: 'bg-pink-200/90 border-pink-300 text-pink-900',
+          headerBg: 'bg-pink-200/95 border-pink-300 text-pink-900',
           brandIcon: 'bg-pink-500 text-white rounded-full',
           primaryBtn: 'bg-pink-500 hover:bg-pink-600 text-white font-bold rounded-2xl shadow-pink-200',
           activeTabBg: 'bg-pink-500 text-white font-bold rounded-2xl shadow-md',
           cardBg: 'bg-white/90 border-pink-200 shadow-md shadow-pink-100/50 rounded-3xl',
-          accentText: 'text-pink-600'
+          accentText: 'text-pink-600',
+          floatingCal: 'bg-pink-500 hover:bg-pink-600 text-white shadow-lg shadow-pink-300/60',
+          floatingSet: 'bg-pink-100 hover:bg-pink-200 text-pink-700 border-pink-300 shadow-md'
         };
         if (theme === 'business') return {
           headerBg: 'bg-slate-900 border-slate-800 text-slate-100',
@@ -587,7 +597,9 @@
           primaryBtn: 'bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-md shadow-sm',
           activeTabBg: 'bg-blue-600 text-white font-semibold rounded-md shadow-sm',
           cardBg: 'bg-slate-800 border-slate-700 shadow-lg text-slate-100 rounded-lg',
-          accentText: 'text-blue-400'
+          accentText: 'text-blue-400',
+          floatingCal: 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-900/50',
+          floatingSet: 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700 shadow-md'
         };
         return {
           headerBg: 'bg-white/90 border-slate-200 text-slate-800',
@@ -595,7 +607,9 @@
           primaryBtn: 'bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl shadow-xs',
           activeTabBg: 'bg-indigo-600 text-white font-bold rounded-xl shadow-xs',
           cardBg: 'bg-white border-slate-200/80 shadow-xs rounded-2xl',
-          accentText: 'text-indigo-600'
+          accentText: 'text-indigo-600',
+          floatingCal: 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-200',
+          floatingSet: 'bg-white hover:bg-slate-100 text-slate-700 border-slate-200 shadow-md'
         };
       };
       const themeStyles = getThemeClasses();
@@ -626,7 +640,8 @@
       }
 
       return (
-        <div className="min-h-screen text-xs flex flex-col font-sans">
+        <div className="min-h-screen text-xs flex flex-col font-sans pb-16">
+          {/* ヘッダー (コンパクト化 & 登録機能統合) */}
           <header className={`backdrop-blur-md border-b px-4 py-2 flex items-center justify-between sticky top-0 z-20 shadow-xs ${themeStyles.headerBg}`}>
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-2">
@@ -645,25 +660,24 @@
                 <button onClick={() => setIsNewListModalOpen(true)} className="hover:opacity-80 p-0.5 rounded transition" title="リスト作成"><i data-lucide="plus" className="w-3.5 h-3.5"></i></button>
               </div>
             </div>
-            <div className="flex items-center gap-1.5">
-              <button onClick={() => setIsCalendarOpen(true)} className="p-1.5 hover:bg-black/5 rounded-lg border border-black/10 flex items-center gap-1 font-bold transition" title="カレンダーを開く">
-                <i data-lucide="calendar" className="w-4 h-4"></i><span className="hidden sm:inline">カレンダー</span>
+
+            <div className="flex items-center gap-2">
+              <button onClick={openModalForCreate} className={`px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 shadow-xs transition ${themeStyles.primaryBtn}`}>
+                <i data-lucide="plus" className="w-3.5 h-3.5"></i>
+                <span>＋ ToDo</span>
               </button>
-              <button onClick={() => setIsSettingsOpen(true)} className="p-1.5 hover:bg-black/5 rounded-lg border border-black/10 transition" title="設定"><i data-lucide="settings" className="w-4 h-4"></i></button>
-              <button onClick={handleLogout} className="opacity-60 hover:opacity-100 p-1.5 transition" title="ログアウト"><i data-lucide="log-out" className="w-4 h-4"></i></button>
+              <button onClick={() => { setEditingEvent(null); setEditingHoliday(null); setEventTitle(''); setIsEventModalOpen(true); }} className="px-2.5 py-1 rounded-lg font-bold text-[11px] text-purple-700 bg-purple-50 hover:bg-purple-100 transition border border-purple-200/60 flex items-center gap-1">
+                <span>🎉 予定</span>
+              </button>
+              <button onClick={handleLogout} className="opacity-60 hover:opacity-100 p-1.5 transition ml-1" title="ログアウト"><i data-lucide="log-out" className="w-4 h-4"></i></button>
             </div>
           </header>
 
-          <div className="bg-white/80 border-b border-slate-200/60 px-4 py-1.5 flex items-center justify-between overflow-x-auto">
-            <div className="flex gap-1">
-              <button onClick={() => setActiveTab('today')} className={`px-2.5 py-1.5 font-bold text-[11px] whitespace-nowrap transition ${activeTab === 'today' ? themeStyles.activeTabBg : 'text-slate-500 hover:bg-slate-100 rounded-xl'}`}>☀️ 本日</button>
-              <button onClick={() => setActiveTab('todos')} className={`px-2.5 py-1.5 font-bold text-[11px] whitespace-nowrap transition ${activeTab === 'todos' ? themeStyles.activeTabBg : 'text-slate-500 hover:bg-slate-100 rounded-xl'}`}>📝 ToDo</button>
-              <button onClick={() => setActiveTab('memos')} className={`px-2.5 py-1.5 font-bold text-[11px] whitespace-nowrap transition ${activeTab === 'memos' ? themeStyles.activeTabBg : 'text-slate-500 hover:bg-slate-100 rounded-xl'}`}>📌 メモ</button>
-              <button onClick={() => { setEditingEvent(null); setEditingHoliday(null); setEventTitle(''); setIsEventModalOpen(true); }} className="px-2.5 py-1.5 font-bold text-[11px] whitespace-nowrap text-purple-700 bg-purple-50 hover:bg-purple-100 transition border border-purple-200/60 flex items-center gap-1 rounded-xl">🎉 予定追加</button>
-            </div>
-            <button onClick={openModalForCreate} className={`px-3 py-1 text-[11px] flex items-center gap-1 transition ml-2 whitespace-nowrap ${themeStyles.primaryBtn}`}>
-              <i data-lucide="plus" className="w-3.5 h-3.5"></i><span>新規ToDo</span>
-            </button>
+          {/* メインタブ */}
+          <div className="bg-white/80 border-b border-slate-200/60 px-4 py-1.5 flex items-center justify-start gap-1 overflow-x-auto">
+            <button onClick={() => setActiveTab('today')} className={`px-3 py-1.5 font-bold text-[11px] whitespace-nowrap transition ${activeTab === 'today' ? themeStyles.activeTabBg : 'text-slate-500 hover:bg-slate-100 rounded-xl'}`}>☀️ 本日</button>
+            <button onClick={() => setActiveTab('todos')} className={`px-3 py-1.5 font-bold text-[11px] whitespace-nowrap transition ${activeTab === 'todos' ? themeStyles.activeTabBg : 'text-slate-500 hover:bg-slate-100 rounded-xl'}`}>📝 ToDo</button>
+            <button onClick={() => setActiveTab('memos')} className={`px-3 py-1.5 font-bold text-[11px] whitespace-nowrap transition ${activeTab === 'memos' ? themeStyles.activeTabBg : 'text-slate-500 hover:bg-slate-100 rounded-xl'}`}>📌 メモ</button>
           </div>
 
           <main className="flex-1 max-w-2xl w-full mx-auto p-3.5 space-y-3.5">
@@ -876,6 +890,25 @@
             )}
           </main>
 
+          {/* 追従式（フローティング）固定ボタン */}
+          {/* 右下: カレンダー */}
+          <button
+            onClick={() => setIsCalendarOpen(true)}
+            className={`fixed bottom-5 right-5 p-3.5 rounded-full z-40 transition-transform active:scale-95 flex items-center justify-center ${themeStyles.floatingCal}`}
+            title="カレンダーを開く"
+          >
+            <i data-lucide="calendar" className="w-6 h-6"></i>
+          </button>
+
+          {/* 左下: 設定 */}
+          <button
+            onClick={() => setIsSettingsOpen(true)}
+            className={`fixed bottom-5 left-5 p-3.5 rounded-full z-40 transition-transform active:scale-95 flex items-center justify-center border ${themeStyles.floatingSet}`}
+            title="設定"
+          >
+            <i data-lucide="settings" className="w-5 h-5"></i>
+          </button>
+
           {/* カレンダーモーダル */}
           {isCalendarOpen && (
             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 z-50">
@@ -983,13 +1016,24 @@
                     )}
                   </div>
 
-                  <div className="pt-2 border-t flex justify-between gap-2">
-                    <button onClick={() => {
-                      const target = selectedDayDetailDate;
-                      setSelectedDayDetailDate(null);
-                      openModalForCreateFromDate(target);
-                    }} className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition flex-1">＋ この日にToDo追加</button>
-                    <button onClick={() => setSelectedDayDetailDate(null)} className="px-3 py-1.5 border rounded-lg text-xs font-bold">閉じる</button>
+                  <div className="pt-2 border-t space-y-1.5">
+                    <div className="flex gap-1.5">
+                      <button onClick={() => {
+                        const target = selectedDayDetailDate;
+                        setSelectedDayDetailDate(null);
+                        openModalForCreateFromDate(target);
+                      }} className="bg-indigo-600 hover:bg-indigo-700 text-white px-2 py-1.5 rounded-lg text-[10px] font-bold transition flex-1 flex items-center justify-center gap-1">
+                        <span>＋ ToDo追加</span>
+                      </button>
+                      <button onClick={() => {
+                        const target = selectedDayDetailDate;
+                        setSelectedDayDetailDate(null);
+                        openEventModalFromDate(target);
+                      }} className="bg-purple-600 hover:bg-purple-700 text-white px-2 py-1.5 rounded-lg text-[10px] font-bold transition flex-1 flex items-center justify-center gap-1">
+                        <span>🎉 予定・休日追加</span>
+                      </button>
+                    </div>
+                    <button onClick={() => setSelectedDayDetailDate(null)} className="w-full py-1 border rounded-lg text-xs font-bold">閉じる</button>
                   </div>
                 </div>
               </div>
