@@ -442,7 +442,6 @@
         setIsModalOpen(true);
       };
 
-      // 指定日でTodoを作成
       const openModalForCreateFromDate = (targetDateStr) => {
         if (!selectedListId && lists.length === 0) { alert('先にリストを作成してください。'); setIsNewListModalOpen(true); return; }
         setEditingTodo(null);
@@ -455,7 +454,6 @@
         setIsModalOpen(true);
       };
 
-      // 指定日でイベント作成モーダルを開く
       const openEventModalFromDate = (targetDateStr) => {
         setEditingEvent(null);
         setEditingHoliday(null);
@@ -583,19 +581,17 @@
       const getThemeClasses = () => {
         if (theme === 'animal') return {
           headerBg: 'bg-pink-200/95 border-pink-300 text-pink-900',
-          brandIcon: 'bg-pink-500 text-white rounded-full',
-          primaryBtn: 'bg-pink-500 hover:bg-pink-600 text-white font-bold rounded-2xl shadow-pink-200',
-          activeTabBg: 'bg-pink-500 text-white font-bold rounded-2xl shadow-md',
-          cardBg: 'bg-white/90 border-pink-200 shadow-md shadow-pink-100/50 rounded-3xl',
+          primaryBtn: 'bg-pink-500 hover:bg-pink-600 text-white font-bold rounded-xl shadow-pink-200',
+          activeTabBg: 'bg-pink-500 text-white font-bold rounded-xl shadow-md',
+          cardBg: 'bg-white/90 border-pink-200 shadow-md shadow-pink-100/50 rounded-2xl',
           accentText: 'text-pink-600',
           floatingCal: 'bg-pink-500 hover:bg-pink-600 text-white shadow-lg shadow-pink-300/60',
           floatingSet: 'bg-pink-100 hover:bg-pink-200 text-pink-700 border-pink-300 shadow-md'
         };
         if (theme === 'business') return {
           headerBg: 'bg-slate-900 border-slate-800 text-slate-100',
-          brandIcon: 'bg-blue-600 text-white rounded-md',
-          primaryBtn: 'bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-md shadow-sm',
-          activeTabBg: 'bg-blue-600 text-white font-semibold rounded-md shadow-sm',
+          primaryBtn: 'bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-sm',
+          activeTabBg: 'bg-blue-600 text-white font-semibold rounded-lg shadow-sm',
           cardBg: 'bg-slate-800 border-slate-700 shadow-lg text-slate-100 rounded-lg',
           accentText: 'text-blue-400',
           floatingCal: 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-900/50',
@@ -603,10 +599,9 @@
         };
         return {
           headerBg: 'bg-white/90 border-slate-200 text-slate-800',
-          brandIcon: 'bg-indigo-600 text-white rounded-lg',
-          primaryBtn: 'bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl shadow-xs',
-          activeTabBg: 'bg-indigo-600 text-white font-bold rounded-xl shadow-xs',
-          cardBg: 'bg-white border-slate-200/80 shadow-xs rounded-2xl',
+          primaryBtn: 'bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg shadow-xs',
+          activeTabBg: 'bg-indigo-600 text-white font-bold rounded-lg shadow-xs',
+          cardBg: 'bg-white border-slate-200/80 shadow-xs rounded-xl',
           accentText: 'text-indigo-600',
           floatingCal: 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-200',
           floatingSet: 'bg-white hover:bg-slate-100 text-slate-700 border-slate-200 shadow-md'
@@ -641,43 +636,41 @@
 
       return (
         <div className="min-h-screen text-xs flex flex-col font-sans pb-16">
-          {/* ヘッダー (コンパクト化 & 登録機能統合) */}
-          <header className={`backdrop-blur-md border-b px-4 py-2 flex items-center justify-between sticky top-0 z-20 shadow-xs ${themeStyles.headerBg}`}>
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2">
-                <div className={`p-1.5 shadow-xs ${themeStyles.brandIcon}`}>
-                  <i data-lucide={theme === 'animal' ? 'cat' : theme === 'business' ? 'briefcase' : 'check-square'} className="w-4 h-4"></i>
-                </div>
-                <span className="font-extrabold text-sm tracking-tight hidden sm:inline">
-                  TaskFlow {theme === 'animal' && '🐾'}
-                </span>
-              </div>
-              <div className="flex items-center gap-1.5 bg-black/5 px-2.5 py-1 rounded-lg border border-black/10">
-                <span className="text-[10px] opacity-60 font-medium">リスト:</span>
-                <select value={selectedListId} onChange={(e) => setSelectedListId(e.target.value)} className="bg-transparent font-bold outline-none text-xs cursor-pointer">
-                  {lists.length === 0 ? <option value="">(リストなし)</option> : lists.map(l => <option key={l.id} value={l.id} className="text-slate-800">{l.name}</option>)}
-                </select>
-                <button onClick={() => setIsNewListModalOpen(true)} className="hover:opacity-80 p-0.5 rounded transition" title="リスト作成"><i data-lucide="plus" className="w-3.5 h-3.5"></i></button>
-              </div>
+          {/* ヘッダー (極細・左上リスト大表示・ボタン簡略化) */}
+          <header className={`backdrop-blur-md border-b px-3 py-1 flex items-center justify-between sticky top-0 z-20 shadow-xs ${themeStyles.headerBg}`}>
+            {/* 左側: アイコン撤去＆リストを大きく表示 */}
+            <div className="flex items-center gap-1.5 min-w-0 flex-1">
+              <select 
+                value={selectedListId} 
+                onChange={(e) => setSelectedListId(e.target.value)} 
+                className="bg-transparent font-black outline-none text-sm cursor-pointer truncate max-w-[180px] sm:max-w-xs py-0.5"
+              >
+                {lists.length === 0 ? <option value="">(リストなし)</option> : lists.map(l => <option key={l.id} value={l.id} className="text-slate-800 font-bold">{l.name}</option>)}
+              </select>
+              <button onClick={() => setIsNewListModalOpen(true)} className="hover:opacity-80 p-0.5 rounded transition shrink-0" title="リスト作成">
+                <i data-lucide="plus" className="w-4 h-4"></i>
+              </button>
             </div>
 
-            <div className="flex items-center gap-2">
-              <button onClick={openModalForCreate} className={`px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 shadow-xs transition ${themeStyles.primaryBtn}`}>
-                <i data-lucide="plus" className="w-3.5 h-3.5"></i>
-                <span>＋ ToDo</span>
+            {/* 右側: 簡略化されたボタン配置 */}
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button onClick={openModalForCreate} className={`px-2 py-1 rounded-md text-[11px] font-bold transition ${themeStyles.primaryBtn}`}>
+                ＋todo
               </button>
-              <button onClick={() => { setEditingEvent(null); setEditingHoliday(null); setEventTitle(''); setIsEventModalOpen(true); }} className="px-2.5 py-1 rounded-lg font-bold text-[11px] text-purple-700 bg-purple-50 hover:bg-purple-100 transition border border-purple-200/60 flex items-center gap-1">
-                <span>🎉 予定</span>
+              <button onClick={() => { setEditingEvent(null); setEditingHoliday(null); setEventTitle(''); setIsEventModalOpen(true); }} className="px-2 py-1 rounded-md font-bold text-[11px] text-purple-700 bg-purple-50 hover:bg-purple-100 transition border border-purple-200/60">
+                予定
               </button>
-              <button onClick={handleLogout} className="opacity-60 hover:opacity-100 p-1.5 transition ml-1" title="ログアウト"><i data-lucide="log-out" className="w-4 h-4"></i></button>
+              <button onClick={handleLogout} className="opacity-60 hover:opacity-100 p-1 transition ml-0.5" title="ログアウト">
+                <i data-lucide="log-out" className="w-3.5 h-3.5"></i>
+              </button>
             </div>
           </header>
 
           {/* メインタブ */}
-          <div className="bg-white/80 border-b border-slate-200/60 px-4 py-1.5 flex items-center justify-start gap-1 overflow-x-auto">
-            <button onClick={() => setActiveTab('today')} className={`px-3 py-1.5 font-bold text-[11px] whitespace-nowrap transition ${activeTab === 'today' ? themeStyles.activeTabBg : 'text-slate-500 hover:bg-slate-100 rounded-xl'}`}>☀️ 本日</button>
-            <button onClick={() => setActiveTab('todos')} className={`px-3 py-1.5 font-bold text-[11px] whitespace-nowrap transition ${activeTab === 'todos' ? themeStyles.activeTabBg : 'text-slate-500 hover:bg-slate-100 rounded-xl'}`}>📝 ToDo</button>
-            <button onClick={() => setActiveTab('memos')} className={`px-3 py-1.5 font-bold text-[11px] whitespace-nowrap transition ${activeTab === 'memos' ? themeStyles.activeTabBg : 'text-slate-500 hover:bg-slate-100 rounded-xl'}`}>📌 メモ</button>
+          <div className="bg-white/80 border-b border-slate-200/60 px-3 py-1 flex items-center justify-start gap-1 overflow-x-auto">
+            <button onClick={() => setActiveTab('today')} className={`px-3 py-1 font-bold text-[11px] whitespace-nowrap transition ${activeTab === 'today' ? themeStyles.activeTabBg : 'text-slate-500 hover:bg-slate-100 rounded-lg'}`}>☀️ 本日</button>
+            <button onClick={() => setActiveTab('todos')} className={`px-3 py-1 font-bold text-[11px] whitespace-nowrap transition ${activeTab === 'todos' ? themeStyles.activeTabBg : 'text-slate-500 hover:bg-slate-100 rounded-lg'}`}>📝 ToDo</button>
+            <button onClick={() => setActiveTab('memos')} className={`px-3 py-1 font-bold text-[11px] whitespace-nowrap transition ${activeTab === 'memos' ? themeStyles.activeTabBg : 'text-slate-500 hover:bg-slate-100 rounded-lg'}`}>📌 メモ</button>
           </div>
 
           <main className="flex-1 max-w-2xl w-full mx-auto p-3.5 space-y-3.5">
