@@ -140,6 +140,9 @@
       const [holidays, setHolidays] = useState([]);
       const [memberNames, setMemberNames] = useState(['自分', '家族']);
       const [locationCode, setLocationCode] = useState('230000');
+      
+      // 必須事前通知設定（日数）
+      const [essentialNoticeDays, setEssentialNoticeDays] = useState(7);
 
       const [searchQuery, setSearchQuery] = useState('');
       const [selectedTagFilter, setSelectedTagFilter] = useState('すべて');
@@ -150,10 +153,20 @@
       const [isModalOpen, setIsModalOpen] = useState(false);
       const [isNewListModalOpen, setIsNewListModalOpen] = useState(false);
       const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+      const [settingsTab, setSettingsTab] = useState('account'); // account, alert, app, feedback
       const [isTrashOpen, setIsTrashOpen] = useState(false);
       const [isEventModalOpen, setIsEventModalOpen] = useState(false);
       
       const [selectedDayDetailDate, setSelectedDayDetailDate] = useState(null);
+
+      // アカウント情報変更フォーム
+      const [newUserIdInput, setNewUserIdInput] = useState('');
+      const [newPasswordInput, setNewPasswordInput] = useState('');
+      const [accountMsg, setAccountMsg] = useState('');
+
+      // お問い合わせフォーム
+      const [feedbackInput, setFeedbackInput] = useState('');
+      const [feedbackMsg, setFeedbackMsg] = useState('');
 
       const [formHasDate, setFormHasDate] = useState(true);
       const [formDateMode, setFormDateMode] = useState('range');
@@ -216,6 +229,8 @@
 
       const loadUserData = (id) => {
         const rawData = localStorage.getItem(`app_data_${id}`);
+        const storedUsers = JSON.parse(localStorage.getItem('app_users_db') || '{}');
+        
         if (rawData) {
           const data = JSON.parse(rawData);
           setLists(data.lists || []);
@@ -232,18 +247,22 @@
           setPaydayAdjustment(data.paydayAdjustment || 'prev');
           setHolidays(data.holidays || []);
           setMemberNames(data.memberNames || ['自分', '家族']);
+          setEssentialNoticeDays(data.essentialNoticeDays || 7);
         } else {
           setLists([]); setSelectedListId(''); setTodos([]); setTrash([]); setMemos([]); setTags([]);
-          setLocationCode('230000'); setTheme('simple'); setEvents([]); setPayday('25'); setPaydayAdjustment('prev'); setHolidays([]); setMemberNames(['自分', '家族']);
+          setLocationCode('230000'); setTheme('simple'); setEvents([]); setPayday('25'); setPaydayAdjustment('prev'); setHolidays([]); setMemberNames(['自分', '家族']); setEssentialNoticeDays(7);
         }
         setUserId(id);
+        setNewUserIdInput(id);
+        setPassword(storedUsers[id] || '');
+        setNewPasswordInput(storedUsers[id] || '');
         setIsLoggedIn(true);
         localStorage.setItem('app_active_user', id);
       };
 
       const saveUserData = (
         updatedTodos, updatedLists, updatedTags, updatedLocation, updatedSelectedListId, updatedMemos, updatedTrash,
-        updatedEvents, updatedPayday, updatedHolidays, updatedMembers, updatedPaydayAdj, updatedTheme
+        updatedEvents, updatedPayday, updatedHolidays, updatedMembers, updatedPaydayAdj, updatedTheme, updatedNoticeDays
       ) => {
         if (!userId) return;
         const dataToSave = {
@@ -259,7 +278,8 @@
           payday: updatedPayday !== undefined ? updatedPayday : payday,
           paydayAdjustment: updatedPaydayAdj !== undefined ? updatedPaydayAdj : paydayAdjustment,
           holidays: updatedHolidays !== undefined ? updatedHolidays : holidays,
-          memberNames: updatedMembers !== undefined ? updatedMembers : memberNames
+          memberNames: updatedMembers !== undefined ? updatedMembers : memberNames,
+          essentialNoticeDays: updatedNoticeDays !== undefined ? updatedNoticeDays : essentialNoticeDays
         };
         localStorage.setItem(`app_data_${userId}`, JSON.stringify(dataToSave));
       };
@@ -280,6 +300,57 @@
           }
           loadUserData(userId);
         }
+      };
+
+      const handleUpdateAccount = (e) => {
+        e.preventDefault();
+        setAccountMsg('');
+        const trimmedId = newUserIdInput.trim();
+        const trimmedPass = newPasswordInput.trim();
+
+        if (!trimmedId || !trimmedPass) {
+          setAccountMsg('❌ IDとパスワードを入力してください');
+          return;
+        }
+
+        const storedUsers = JSON.parse(localStorage.getItem('app_users_db') || '{}');
+
+        // ID変更時
+        if (trimmedId !== userId) {
+          if (storedUsers[trimmedId]) {
+            setAccountMsg('❌ このIDは既に使用されています');
+            return;
+          }
+          delete storedUsers[userId];
+          const oldData = localStorage.getItem(`app_data_${userId}`);
+          if (oldData) {
+            localStorage.setItem(`app_data_${trimmedId}`, oldData);
+            localStorage.removeItem(`app_data_${userId}`);
+          }
+        }
+
+        storedUsers[trimmedId] = trimmedPass;
+        localStorage.setItem('app_users_db', JSON.stringify(storedUsers));
+        localStorage.setItem('app_active_user', trimmedId);
+
+        setUserId(trimmedId);
+        setPassword(trimmedPass);
+        setAccountMsg('✅ アカウント情報を更新しました！');
+      };
+
+      const handleSendFeedback = (e) => {
+        e.preventDefault();
+        if (!feedbackInput.trim()) return;
+        
+        const feedbacks = JSON.parse(localStorage.getItem('app_feedbacks') || '[]');
+        feedbacks.push({
+          userId,
+          text: feedbackInput.trim(),
+          date: new Date().toLocaleString('ja-JP')
+        });
+        localStorage.setItem('app_feedbacks', JSON.stringify(feedbacks));
+        setFeedbackInput('');
+        setFeedbackMsg('🎉 リクエストを送信しました。ご協力ありがとうございます！');
       };
 
       const handleLogout = () => {
@@ -519,6 +590,7 @@
       const handleSaveLocation = (code) => { setLocationCode(code); saveUserData(undefined, undefined, undefined, code); };
       const handleSaveTheme = (th) => { setTheme(th); saveUserData(undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, th); };
       const handleSavePayday = (pd, adj) => { setPayday(pd); setPaydayAdjustment(adj); saveUserData(undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, pd, undefined, undefined, adj); };
+      const handleSaveNoticeDays = (days) => { setEssentialNoticeDays(days); saveUserData(undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, days); };
 
       const handlePickerDateClick = (dateStr) => {
         if (formDateMode === 'range') {
@@ -558,6 +630,18 @@
       const isTodayPayday = calculatedPaydayStr === todayStr;
 
       const currentListTodos = todos.filter(t => t.listId === selectedListId);
+
+      // 必須事前通知対象のタスク（未完了かつ指定日数以内）
+      const noticeTargetDate = new Date();
+      noticeTargetDate.setDate(noticeTargetDate.getDate() + parseInt(essentialNoticeDays, 10));
+      const noticeTargetStr = noticeTargetDate.toISOString().split('T')[0];
+
+      const upcomingEssentialTodos = currentListTodos.filter(t => {
+        if (!t.isEssential || t.completed || !t.hasDate) return false;
+        const targetDate = t.dateMode === 'specific' ? (t.specificDates && t.specificDates[0]) : t.startDate;
+        return targetDate && targetDate >= todayStr && targetDate <= noticeTargetStr;
+      });
+
       const filteredTodos = currentListTodos.filter(t => {
         const matchesSearch = t.title.toLowerCase().includes(searchQuery.toLowerCase()) || t.detail.toLowerCase().includes(searchQuery.toLowerCase());
         const matchesTag = selectedTagFilter === 'すべて' || (t.tags && t.tags.includes(selectedTagFilter));
@@ -600,7 +684,6 @@
         const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
         calendarDays.push({ day: i, dateStr });
       }
-      // 常に均一なグリッド（6行×7列=42マス）になるようにパディング
       while (calendarDays.length < 42) {
         calendarDays.push(null);
       }
@@ -711,6 +794,29 @@
           <main className="flex-1 max-w-2xl w-full mx-auto p-4 space-y-4">
             {activeTab === 'today' && (
               <div className="space-y-4 animate-modal">
+                {/* 必須タスクの事前通知アラートバナー */}
+                {upcomingEssentialTodos.length > 0 && (
+                  <div className="bg-gradient-to-r from-red-500/15 via-rose-500/10 to-amber-500/10 border-2 border-red-500/40 rounded-3xl p-4 shadow-md space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 text-red-600 dark:text-red-400 font-extrabold text-xs">
+                        <span className="animate-bounce">⚠️</span>
+                        <span>まもなく期限の必須タスク ({essentialNoticeDays}日以内: {upcomingEssentialTodos.length}件)</span>
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      {upcomingEssentialTodos.map(todo => {
+                        const targetDateStr = todo.dateMode === 'specific' ? (todo.specificDates && todo.specificDates[0]) : todo.startDate;
+                        return (
+                          <div key={todo.id} className="bg-white/90 dark:bg-slate-900 p-2.5 rounded-2xl border border-red-200 dark:border-red-900/50 flex items-center justify-between shadow-2xs">
+                            <span className="font-bold text-xs truncate flex-1 mr-2">{todo.title}</span>
+                            <span className="bg-red-600 text-white text-[10px] font-extrabold px-2 py-0.5 rounded-lg shrink-0">📅 {targetDateStr}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
                 <div className={`p-4 ${themeStyles.cardBg} space-y-3`}>
                   <div className="flex items-center justify-between">
                     <div>
@@ -928,14 +1034,14 @@
           </button>
 
           <button
-            onClick={() => setIsSettingsOpen(true)}
+            onClick={() => { setIsSettingsOpen(true); setAccountMsg(''); setFeedbackMsg(''); }}
             className={`fixed bottom-6 left-6 p-3.5 z-40 flex items-center justify-center ${themeStyles.floatingSet}`}
             title="設定"
           >
             <i data-lucide="settings" className="w-5 h-5"></i>
           </button>
 
-          {/* カレンダーモーダル (均一マス・画面いっぱい・微小フォント・当日＆必須演出対応) */}
+          {/* カレンダーモーダル */}
           {isCalendarOpen && (
             <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center z-50 p-0">
               <div className="bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 w-full h-full flex flex-col animate-modal">
@@ -956,7 +1062,6 @@
                   <span className="text-rose-500">日</span><span>月</span><span>火</span><span>水</span><span>木</span><span>金</span><span className="text-blue-500">土</span>
                 </div>
 
-                {/* カレンダー本体：常に6行で高さを均一化 (grid-template-rows) */}
                 <div 
                   className="grid grid-cols-7 flex-1 divide-x divide-y divide-slate-200 dark:divide-slate-800 bg-slate-200 dark:bg-slate-800"
                   style={{ gridTemplateRows: 'repeat(6, 1fr)' }}
@@ -1285,49 +1390,106 @@
             </div>
           )}
 
-          {/* 設定モーダル */}
+          {/* コンパクト＆タブ化された高度な設定モーダル */}
           {isSettingsOpen && (
             <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-3 z-50">
-              <div className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 rounded-3xl w-full max-w-xs p-5 shadow-2xl border border-black/10 dark:border-slate-800 space-y-4 animate-modal">
-                <div className="flex items-center justify-between border-b border-black/10 dark:border-slate-800 pb-2.5">
-                  <h2 className="text-xs font-bold">設定・テーマ変更</h2>
+              <div className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 rounded-3xl w-full max-w-sm p-4 shadow-2xl border border-black/10 dark:border-slate-800 space-y-3 animate-modal">
+                <div className="flex items-center justify-between border-b border-black/10 dark:border-slate-800 pb-2">
+                  <h2 className="text-xs font-black flex items-center gap-1.5"><i data-lucide="settings" className="w-4 h-4 text-indigo-500"></i>アプリ設定</h2>
                   <button onClick={() => setIsSettingsOpen(false)} className="opacity-60 hover:opacity-100 p-1"><i data-lucide="x" className="w-4 h-4"></i></button>
                 </div>
-                <div className="space-y-2">
-                  <label className="block text-[10px] font-bold opacity-60">🎨 デザインテーマ</label>
-                  <div className="grid grid-cols-3 gap-2">
-                    <button onClick={() => handleSaveTheme('simple')} className={`p-2.5 rounded-2xl text-xs font-bold border transition text-center hover-scale ${theme === 'simple' ? 'bg-slate-900 text-white border-slate-900 shadow-sm' : 'bg-black/5 dark:bg-slate-800 border-transparent'}`}>⚪ シンプル</button>
-                    <button onClick={() => handleSaveTheme('animal')} className={`p-2.5 rounded-2xl text-xs font-bold border transition text-center hover-scale ${theme === 'animal' ? 'bg-rose-400 text-white border-rose-400 shadow-sm' : 'bg-pink-50 dark:bg-slate-800 border-transparent text-rose-800 dark:text-rose-300'}`}>🐾 アニマル</button>
-                    <button onClick={() => handleSaveTheme('business')} className={`p-2.5 rounded-2xl text-xs font-bold border transition text-center hover-scale ${theme === 'business' ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'bg-black/5 dark:bg-slate-800 border-transparent'}`}>💼 ビジネス</button>
+
+                {/* コンパクトな横スクロールタブナビゲーション */}
+                <div className="flex gap-1 overflow-x-auto pb-1 border-b border-black/5 dark:border-slate-800 text-[11px] font-bold">
+                  <button onClick={() => setSettingsTab('account')} className={`px-3 py-1.5 rounded-xl whitespace-nowrap transition ${settingsTab === 'account' ? 'bg-indigo-600 text-white' : 'bg-black/5 dark:bg-slate-800'}`}>👤 アカウント</button>
+                  <button onClick={() => setSettingsTab('alert')} className={`px-3 py-1.5 rounded-xl whitespace-nowrap transition ${settingsTab === 'alert' ? 'bg-indigo-600 text-white' : 'bg-black/5 dark:bg-slate-800'}`}>🔔 リマインダー</button>
+                  <button onClick={() => setSettingsTab('app')} className={`px-3 py-1.5 rounded-xl whitespace-nowrap transition ${settingsTab === 'app' ? 'bg-indigo-600 text-white' : 'bg-black/5 dark:bg-slate-800'}`}>🎨 テーマ・天気</button>
+                  <button onClick={() => setSettingsTab('feedback')} className={`px-3 py-1.5 rounded-xl whitespace-nowrap transition ${settingsTab === 'feedback' ? 'bg-indigo-600 text-white' : 'bg-black/5 dark:bg-slate-800'}`}>💬 リクエスト</button>
+                </div>
+
+                {/* タブ 1: アカウント確認・変更 */}
+                {settingsTab === 'account' && (
+                  <form onSubmit={handleUpdateAccount} className="space-y-2.5 pt-1">
+                    {accountMsg && <div className="p-2 bg-indigo-500/10 text-indigo-600 dark:text-indigo-300 font-bold text-[10px] rounded-xl text-center">{accountMsg}</div>}
+                    <div>
+                      <label className="block text-[10px] font-bold opacity-60 mb-0.5">ユーザーID (確認・変更)</label>
+                      <input type="text" value={newUserIdInput} onChange={(e) => setNewUserIdInput(e.target.value)} className="w-full px-3 py-2 bg-black/5 dark:bg-slate-950 border border-black/10 dark:border-slate-800 rounded-xl text-xs font-bold outline-none" required />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold opacity-60 mb-0.5">パスワード (確認・変更)</label>
+                      <input type="text" value={newPasswordInput} onChange={(e) => setNewPasswordInput(e.target.value)} className="w-full px-3 py-2 bg-black/5 dark:bg-slate-950 border border-black/10 dark:border-slate-800 rounded-xl text-xs font-bold outline-none" required />
+                    </div>
+                    <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-500 text-white py-2 rounded-xl text-xs font-bold shadow-sm transition hover-scale">変更内容を保存</button>
+                  </form>
+                )}
+
+                {/* タブ 2: リマインダー & 給料日 */}
+                {settingsTab === 'alert' && (
+                  <div className="space-y-3 pt-1">
+                    <div className="space-y-1">
+                      <label className="block text-[10px] font-bold opacity-60">必須タスクの事前通知日数</label>
+                      <div className="flex items-center gap-2">
+                        <select value={essentialNoticeDays} onChange={(e) => handleSaveNoticeDays(e.target.value)} className="flex-1 px-3 py-2 bg-black/5 dark:bg-slate-950 border border-black/10 dark:border-slate-800 rounded-xl text-xs font-bold outline-none">
+                          <option value="1">1日前 (前日)</option>
+                          <option value="3">3日前</option>
+                          <option value="7">7日前 (1週間前)</option>
+                          <option value="14">14日前 (2週間前)</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div className="space-y-1.5 pt-2 border-t border-black/10 dark:border-slate-800">
+                      <label className="block text-[10px] font-bold opacity-60">毎月の給料日 & 休日の補正</label>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-bold">毎月</span>
+                        <input type="number" min="1" max="31" value={payday} onChange={(e) => handleSavePayday(e.target.value, paydayAdjustment)} className="w-14 px-2 py-1 bg-black/5 dark:bg-slate-950 border border-black/10 dark:border-slate-800 rounded-xl text-xs font-bold outline-none text-center" />
+                        <span className="text-xs font-bold">日</span>
+                      </div>
+                      <select value={paydayAdjustment} onChange={(e) => handleSavePayday(payday, e.target.value)} className="w-full px-2.5 py-1.5 bg-black/5 dark:bg-slate-950 border border-black/10 dark:border-slate-800 rounded-xl text-xs font-bold outline-none">
+                        <option value="prev">⏪ 直前の平日に前倒し</option>
+                        <option value="next">⏩ 直後の平日に後送り</option>
+                        <option value="none">補正なし (日付通り)</option>
+                      </select>
+                    </div>
                   </div>
-                </div>
-                <div className="space-y-1.5 pt-2 border-t border-black/10 dark:border-slate-800">
-                  <label className="block text-[10px] font-bold opacity-60">天気予報の地域設定</label>
-                  <select value={locationCode} onChange={(e) => handleSaveLocation(e.target.value)} className="w-full px-3.5 py-2.5 bg-black/5 dark:bg-slate-950 border border-black/10 dark:border-slate-800 rounded-2xl text-xs font-bold outline-none">
-                    {PREFECTURES.map(p => <option key={p.code} value={p.code}>{p.name}</option>)}
-                  </select>
-                </div>
-                <div className="space-y-2 pt-2 border-t border-black/10 dark:border-slate-800">
-                  <label className="block text-[10px] font-bold opacity-60">毎月の給料日 & 休日の補正設定</label>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-xs font-bold">毎月</span>
-                    <input type="number" min="1" max="31" value={payday} onChange={(e) => handleSavePayday(e.target.value, paydayAdjustment)} className="w-16 px-3 py-1.5 bg-black/5 dark:bg-slate-950 border border-black/10 dark:border-slate-800 rounded-xl text-xs font-bold outline-none text-center" />
-                    <span className="text-xs font-bold">日</span>
+                )}
+
+                {/* タブ 3: テーマ & 天気地域 */}
+                {settingsTab === 'app' && (
+                  <div className="space-y-3 pt-1">
+                    <div className="space-y-1.5">
+                      <label className="block text-[10px] font-bold opacity-60">🎨 デザインテーマ</label>
+                      <div className="grid grid-cols-3 gap-1.5">
+                        <button onClick={() => handleSaveTheme('simple')} className={`p-2 rounded-xl text-xs font-bold border transition text-center hover-scale ${theme === 'simple' ? 'bg-slate-900 text-white border-slate-900 shadow-sm' : 'bg-black/5 dark:bg-slate-800 border-transparent'}`}>⚪ シンプル</button>
+                        <button onClick={() => handleSaveTheme('animal')} className={`p-2 rounded-xl text-xs font-bold border transition text-center hover-scale ${theme === 'animal' ? 'bg-rose-400 text-white border-rose-400 shadow-sm' : 'bg-pink-50 dark:bg-slate-800 border-transparent text-rose-800 dark:text-rose-300'}`}>🐾 アニマル</button>
+                        <button onClick={() => handleSaveTheme('business')} className={`p-2 rounded-xl text-xs font-bold border transition text-center hover-scale ${theme === 'business' ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'bg-black/5 dark:bg-slate-800 border-transparent'}`}>💼 ビジネス</button>
+                      </div>
+                    </div>
+                    <div className="space-y-1 pt-2 border-t border-black/10 dark:border-slate-800">
+                      <label className="block text-[10px] font-bold opacity-60">天気予報の地域設定</label>
+                      <select value={locationCode} onChange={(e) => handleSaveLocation(e.target.value)} className="w-full px-3 py-2 bg-black/5 dark:bg-slate-950 border border-black/10 dark:border-slate-800 rounded-xl text-xs font-bold outline-none">
+                        {PREFECTURES.map(p => <option key={p.code} value={p.code}>{p.name}</option>)}
+                      </select>
+                    </div>
+                    <div className="pt-2 border-t border-black/10 dark:border-slate-800">
+                      <button onClick={() => setIsTrashOpen(true)} className="w-full bg-black/5 dark:bg-slate-800 hover:opacity-80 font-bold py-2 rounded-xl text-xs flex items-center justify-center gap-1.5 transition hover-scale">
+                        <i data-lucide="trash-2" className="w-3.5 h-3.5 text-rose-500"></i>ゴミ箱を開く ({trash.length}件)
+                      </button>
+                    </div>
                   </div>
-                  <select value={paydayAdjustment} onChange={(e) => handleSavePayday(payday, e.target.value)} className="w-full px-3 py-2.5 bg-black/5 dark:bg-slate-950 border border-black/10 dark:border-slate-800 rounded-2xl text-xs font-bold outline-none">
-                    <option value="prev">⏪ 前倒し (直前の平日に変更)</option>
-                    <option value="next">⏩ 後送り (直後の平日に変更)</option>
-                    <option value="none">そのまま (日付通り)</option>
-                  </select>
-                </div>
-                <div className="pt-2 border-t border-black/10 dark:border-slate-800 space-y-1.5">
-                  <label className="block text-[10px] font-bold opacity-60">ゴミ箱（24時間保管）</label>
-                  <button onClick={() => setIsTrashOpen(true)} className="w-full bg-black/5 dark:bg-slate-800 hover:opacity-80 font-bold py-2.5 rounded-2xl text-xs flex items-center justify-center gap-1.5 transition hover-scale">
-                    <i data-lucide="trash-2" className="w-4 h-4 text-rose-500"></i>ゴミ箱を開く ({trash.length}件)
-                  </button>
-                </div>
-                <div className="flex justify-end pt-2">
-                  <button onClick={() => setIsSettingsOpen(false)} className={`px-4 py-2 rounded-xl text-xs font-bold ${themeStyles.primaryBtn}`}>閉じる</button>
+                )}
+
+                {/* タブ 4: お問い合わせ・リクエスト */}
+                {settingsTab === 'feedback' && (
+                  <form onSubmit={handleSendFeedback} className="space-y-2 pt-1">
+                    {feedbackMsg && <div className="p-2 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300 font-bold text-[10px] rounded-xl text-center">{feedbackMsg}</div>}
+                    <label className="block text-[10px] font-bold opacity-60">ご意見・追加機能のリクエスト</label>
+                    <textarea value={feedbackInput} onChange={(e) => setFeedbackInput(e.target.value)} className="w-full px-3 py-2 bg-black/5 dark:bg-slate-950 border border-black/10 dark:border-slate-800 rounded-xl text-xs outline-none h-20" placeholder="気になったことやご要望をお気軽にお寄せください..." required />
+                    <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-500 text-white py-2 rounded-xl text-xs font-bold shadow-sm transition hover-scale">送信する</button>
+                  </form>
+                )}
+
+                <div className="flex justify-end pt-2 border-t border-black/10 dark:border-slate-800">
+                  <button onClick={() => setIsSettingsOpen(false)} className={`px-4 py-1.5 rounded-xl text-xs font-bold ${themeStyles.primaryBtn}`}>閉じる</button>
                 </div>
               </div>
             </div>
