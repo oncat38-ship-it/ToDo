@@ -23,9 +23,19 @@
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
       transition: background-color 0.3s, color 0.3s;
     }
-    body.theme-simple { background-color: #f8fafc; color: #334155; }
-    body.theme-animal { background-color: #fff5f7; color: #4a3e3d; }
-    body.theme-business { background-color: #f1f5f9; color: #1e293b; }
+    /* テーマカスタマイズ */
+    body.theme-simple {
+      background-color: #f8fafc;
+      color: #334155;
+    }
+    body.theme-animal {
+      background-color: #fff0f5;
+      color: #5c3d46;
+    }
+    body.theme-business {
+      background-color: #0f172a;
+      color: #e2e8f0;
+    }
   </style>
 </head>
 <body>
@@ -136,11 +146,11 @@
 
       // 期間選択・特定数日選択用の状態
       const [formHasDate, setFormHasDate] = useState(true);
-      const [formDateMode, setFormDateMode] = useState('range'); // 'range' | 'specific'
+      const [formDateMode, setFormDateMode] = useState('range');
       const [formStartDate, setFormStartDate] = useState('');
       const [formEndDate, setFormEndDate] = useState('');
       const [formSpecificDates, setFormSpecificDates] = useState([]);
-      const [isPickerOpen, setIsPickerOpen] = useState(false); // 期間選択用カレンダーピッカーの開閉
+      const [isPickerOpen, setIsPickerOpen] = useState(false);
       const [pickerYear, setPickerYear] = useState(new Date().getFullYear());
       const [pickerMonth, setPickerMonth] = useState(new Date().getMonth());
 
@@ -303,7 +313,6 @@
         closeModal();
       };
 
-      // タスク判定ヘルパー (今日が含まれるか、あるいは特定日に含まれるか)
       const isTodoActiveOnDate = (todo, dateStr) => {
         if (!todo.hasDate) return false;
         if (todo.dateMode === 'specific') {
@@ -434,17 +443,21 @@
         setIsModalOpen(true);
       };
 
-      const openModalForCreate = () => {
+      // カレンダーポップアップから直接指定日でTodoを作成する
+      const openModalForCreateFromDate = (targetDateStr) => {
         if (!selectedListId && lists.length === 0) { alert('先にリストを作成してください。'); setIsNewListModalOpen(true); return; }
         setEditingTodo(null);
         setFormTitle(''); setFormDetail('');
         setFormHasDate(true); setFormDateMode('range');
-        const todayStr = new Date().toISOString().split('T')[0];
-        setFormStartDate(todayStr); setFormEndDate(todayStr);
+        setFormStartDate(targetDateStr); setFormEndDate(targetDateStr);
         setFormSpecificDates([]);
         setFormHasTime(false); setFormTime('09:00');
         setFormIsEssential(false); setFormIsLocked(false); setFormTags([]);
         setIsModalOpen(true);
+      };
+
+      const openModalForCreate = () => {
+        openModalForCreateFromDate(new Date().toISOString().split('T')[0]);
       };
 
       const openModalForEdit = (todo) => {
@@ -490,22 +503,15 @@
       const handleSaveTheme = (th) => { setTheme(th); saveUserData(undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, th); };
       const handleSavePayday = (pd, adj) => { setPayday(pd); setPaydayAdjustment(adj); saveUserData(undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, pd, undefined, undefined, adj); };
 
-      // 日付ピッカーでの日付クリック処理（期間選択または特定数日選択）
       const handlePickerDateClick = (dateStr) => {
         if (formDateMode === 'range') {
           if (!formStartDate || (formStartDate && formEndDate)) {
-            setFormStartDate(dateStr);
-            setFormEndDate('');
+            setFormStartDate(dateStr); setFormEndDate('');
           } else {
-            if (dateStr < formStartDate) {
-              setFormStartDate(dateStr);
-              setFormEndDate('');
-            } else {
-              setFormEndDate(dateStr);
-            }
+            if (dateStr < formStartDate) { setFormStartDate(dateStr); setFormEndDate(''); }
+            else { setFormEndDate(dateStr); }
           }
         } else {
-          // specific
           if (formSpecificDates.includes(dateStr)) {
             setFormSpecificDates(formSpecificDates.filter(d => d !== dateStr));
           } else {
@@ -565,10 +571,32 @@
       }
       const calPaydayStr = getAdjustedPaydayDateStr(year, month + 1, payday, paydayAdjustment);
 
+      // テーマ別拡張デザインスタイル
       const getThemeClasses = () => {
-        if (theme === 'animal') return { headerBg: 'bg-pink-100/95 border-pink-200', brandIcon: 'bg-pink-500 text-white', primaryBtn: 'bg-pink-500 hover:bg-pink-600 text-white', activeTabBg: 'bg-pink-500 text-white', cardBg: 'bg-white border-pink-200 shadow-sm', accentText: 'text-pink-600' };
-        if (theme === 'business') return { headerBg: 'bg-slate-800 text-white border-slate-700', brandIcon: 'bg-blue-600 text-white', primaryBtn: 'bg-slate-800 hover:bg-slate-700 text-white', activeTabBg: 'bg-slate-800 text-white', cardBg: 'bg-white border-slate-300 shadow-sm', accentText: 'text-slate-800' };
-        return { headerBg: 'bg-white/90 border-slate-200', brandIcon: 'bg-gradient-to-tr from-indigo-600 to-violet-600 text-white', primaryBtn: 'bg-indigo-600 hover:bg-indigo-700 text-white', activeTabBg: 'bg-indigo-600 text-white', cardBg: 'bg-white border-slate-200 shadow-xs', accentText: 'text-indigo-600' };
+        if (theme === 'animal') return {
+          headerBg: 'bg-pink-200/90 border-pink-300 text-pink-900',
+          brandIcon: 'bg-pink-500 text-white rounded-full',
+          primaryBtn: 'bg-pink-500 hover:bg-pink-600 text-white font-bold rounded-2xl shadow-pink-200',
+          activeTabBg: 'bg-pink-500 text-white font-bold rounded-2xl shadow-md',
+          cardBg: 'bg-white/90 border-pink-200 shadow-md shadow-pink-100/50 rounded-3xl',
+          accentText: 'text-pink-600'
+        };
+        if (theme === 'business') return {
+          headerBg: 'bg-slate-900 border-slate-800 text-slate-100',
+          brandIcon: 'bg-blue-600 text-white rounded-md',
+          primaryBtn: 'bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-md shadow-sm',
+          activeTabBg: 'bg-blue-600 text-white font-semibold rounded-md shadow-sm',
+          cardBg: 'bg-slate-800 border-slate-700 shadow-lg text-slate-100 rounded-lg',
+          accentText: 'text-blue-400'
+        };
+        return {
+          headerBg: 'bg-white/90 border-slate-200 text-slate-800',
+          brandIcon: 'bg-indigo-600 text-white rounded-lg',
+          primaryBtn: 'bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl shadow-xs',
+          activeTabBg: 'bg-indigo-600 text-white font-bold rounded-xl shadow-xs',
+          cardBg: 'bg-white border-slate-200/80 shadow-xs rounded-2xl',
+          accentText: 'text-indigo-600'
+        };
       };
       const themeStyles = getThemeClasses();
 
@@ -602,10 +630,12 @@
           <header className={`backdrop-blur-md border-b px-4 py-2 flex items-center justify-between sticky top-0 z-20 shadow-xs ${themeStyles.headerBg}`}>
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-2">
-                <div className={`p-1.5 rounded-lg shadow-xs ${themeStyles.brandIcon}`}>
+                <div className={`p-1.5 shadow-xs ${themeStyles.brandIcon}`}>
                   <i data-lucide={theme === 'animal' ? 'cat' : theme === 'business' ? 'briefcase' : 'check-square'} className="w-4 h-4"></i>
                 </div>
-                <span className="font-extrabold text-sm tracking-tight hidden sm:inline">TaskFlow {theme === 'animal' && '🐾'}</span>
+                <span className="font-extrabold text-sm tracking-tight hidden sm:inline">
+                  TaskFlow {theme === 'animal' && '🐾'}
+                </span>
               </div>
               <div className="flex items-center gap-1.5 bg-black/5 px-2.5 py-1 rounded-lg border border-black/10">
                 <span className="text-[10px] opacity-60 font-medium">リスト:</span>
@@ -624,14 +654,14 @@
             </div>
           </header>
 
-          <div className="bg-white border-b border-slate-200/60 px-4 py-1.5 flex items-center justify-between overflow-x-auto">
+          <div className="bg-white/80 border-b border-slate-200/60 px-4 py-1.5 flex items-center justify-between overflow-x-auto">
             <div className="flex gap-1">
-              <button onClick={() => setActiveTab('today')} className={`px-2.5 py-1.5 rounded-lg font-bold text-[11px] whitespace-nowrap transition ${activeTab === 'today' ? themeStyles.activeTabBg : 'text-slate-500 hover:bg-slate-100'}`}>☀️ 本日</button>
-              <button onClick={() => setActiveTab('todos')} className={`px-2.5 py-1.5 rounded-lg font-bold text-[11px] whitespace-nowrap transition ${activeTab === 'todos' ? themeStyles.activeTabBg : 'text-slate-500 hover:bg-slate-100'}`}>📝 ToDo</button>
-              <button onClick={() => setActiveTab('memos')} className={`px-2.5 py-1.5 rounded-lg font-bold text-[11px] whitespace-nowrap transition ${activeTab === 'memos' ? themeStyles.activeTabBg : 'text-slate-500 hover:bg-slate-100'}`}>📌 メモ</button>
-              <button onClick={() => { setEditingEvent(null); setEditingHoliday(null); setEventTitle(''); setIsEventModalOpen(true); }} className="px-2.5 py-1.5 rounded-lg font-bold text-[11px] whitespace-nowrap text-purple-700 bg-purple-50 hover:bg-purple-100 transition border border-purple-200/60 flex items-center gap-1">🎉 予定追加</button>
+              <button onClick={() => setActiveTab('today')} className={`px-2.5 py-1.5 font-bold text-[11px] whitespace-nowrap transition ${activeTab === 'today' ? themeStyles.activeTabBg : 'text-slate-500 hover:bg-slate-100 rounded-xl'}`}>☀️ 本日</button>
+              <button onClick={() => setActiveTab('todos')} className={`px-2.5 py-1.5 font-bold text-[11px] whitespace-nowrap transition ${activeTab === 'todos' ? themeStyles.activeTabBg : 'text-slate-500 hover:bg-slate-100 rounded-xl'}`}>📝 ToDo</button>
+              <button onClick={() => setActiveTab('memos')} className={`px-2.5 py-1.5 font-bold text-[11px] whitespace-nowrap transition ${activeTab === 'memos' ? themeStyles.activeTabBg : 'text-slate-500 hover:bg-slate-100 rounded-xl'}`}>📌 メモ</button>
+              <button onClick={() => { setEditingEvent(null); setEditingHoliday(null); setEventTitle(''); setIsEventModalOpen(true); }} className="px-2.5 py-1.5 font-bold text-[11px] whitespace-nowrap text-purple-700 bg-purple-50 hover:bg-purple-100 transition border border-purple-200/60 flex items-center gap-1 rounded-xl">🎉 予定追加</button>
             </div>
-            <button onClick={openModalForCreate} className={`px-3 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 shadow-sm transition ml-2 whitespace-nowrap ${themeStyles.primaryBtn}`}>
+            <button onClick={openModalForCreate} className={`px-3 py-1 text-[11px] flex items-center gap-1 transition ml-2 whitespace-nowrap ${themeStyles.primaryBtn}`}>
               <i data-lucide="plus" className="w-3.5 h-3.5"></i><span>新規ToDo</span>
             </button>
           </div>
@@ -639,22 +669,22 @@
           <main className="flex-1 max-w-2xl w-full mx-auto p-3.5 space-y-3.5">
             {activeTab === 'today' && (
               <div className="space-y-3.5">
-                <div className={`rounded-2xl p-3.5 ${themeStyles.cardBg} space-y-3`}>
+                <div className={`p-3.5 ${themeStyles.cardBg} space-y-3`}>
                   <div className="flex items-center justify-between">
                     <div>
                       <span className={`text-[10px] font-extrabold tracking-wider uppercase ${themeStyles.accentText}`}>TODAY'S SCHEDULE</span>
-                      <div className="text-base font-black text-slate-800 mt-0.5">{formattedToday}</div>
+                      <div className="text-base font-black mt-0.5">{formattedToday}</div>
                     </div>
-                    <div className="flex items-center gap-2.5 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-100">
+                    <div className="flex items-center gap-2.5 bg-black/5 px-3 py-1.5 rounded-xl border border-black/5">
                       <span className="text-xl">{weather.icon}</span>
                       <div className="text-right">
-                        <div className="text-[11px] font-extrabold text-slate-700">{weather.text}</div>
-                        <div className="text-[9px] text-slate-400 font-medium">{PREFECTURES.find(p => p.code === locationCode)?.name || '選択地域'}</div>
+                        <div className="text-[11px] font-extrabold">{weather.text}</div>
+                        <div className="text-[9px] opacity-60 font-medium">{PREFECTURES.find(p => p.code === locationCode)?.name || '選択地域'}</div>
                       </div>
                     </div>
                   </div>
                   {(todayEvents.length > 0 || todayHolidays.length > 0 || isTodayPayday) && (
-                    <div className="pt-2 border-t border-slate-100 flex flex-wrap gap-1.5">
+                    <div className="pt-2 border-t border-black/5 flex flex-wrap gap-1.5">
                       {isTodayPayday && <span className="bg-emerald-100 text-emerald-800 font-extrabold text-[10px] px-2 py-0.5 rounded-lg flex items-center gap-1">💰 本日は給料日です！</span>}
                       {todayEvents.map(ev => <span key={ev.id} onClick={() => { setEditingEvent(ev); setEventFormType('event'); setEventTitle(ev.title); setEventIcon(ev.icon || '🎉'); setEventDate(ev.date); setIsEventModalOpen(true); }} className="bg-purple-100 text-purple-800 font-bold text-[10px] px-2 py-0.5 rounded-lg flex items-center gap-1 cursor-pointer hover:bg-purple-200">{ev.icon || '🎉'} {ev.title}</span>)}
                       {todayHolidays.map(hol => <span key={hol.id} onClick={() => { setEditingHoliday(hol); setEventFormType('holiday'); setHolidayMember(hol.memberName); setEventDate(hol.date); setIsEventModalOpen(true); }} className="bg-amber-100 text-amber-800 font-bold text-[10px] px-2 py-0.5 rounded-lg flex items-center gap-1 cursor-pointer hover:bg-amber-200">🏖️ {hol.memberName} のお休み</span>)}
@@ -677,32 +707,32 @@
                 )}
 
                 <div className="space-y-2">
-                  <span className="font-extrabold text-slate-700 text-xs">本日のタスク ({todayTodos.length}件)</span>
+                  <span className="font-extrabold opacity-80 text-xs">本日のタスク ({todayTodos.length}件)</span>
                   {todayTodos.length === 0 ? (
-                    <div className={`p-6 rounded-2xl text-center text-slate-400 text-xs ${themeStyles.cardBg}`}>本日の予定はありません。</div>
+                    <div className={`p-6 text-center text-slate-400 text-xs ${themeStyles.cardBg}`}>本日の予定はありません。</div>
                   ) : (
                     todayTodos.map(todo => (
-                      <div key={todo.id} className={`p-3 rounded-2xl transition border ${todo.isEssential ? 'bg-gradient-to-r from-red-500/10 via-rose-50 to-white border-red-500 border-2 shadow-md' : `${themeStyles.cardBg}`} ${todo.completed ? 'opacity-40 bg-slate-100' : ''}`}>
+                      <div key={todo.id} className={`p-3 transition border ${todo.isEssential ? 'bg-gradient-to-r from-red-500/10 via-rose-50 to-white border-red-500 border-2 shadow-md' : `${themeStyles.cardBg}`} ${todo.completed ? 'opacity-40 bg-slate-100' : ''}`}>
                         <div className="flex items-start justify-between gap-2.5">
                           <div className="flex items-start gap-2.5 flex-1 min-w-0">
                             <input type="checkbox" checked={todo.completed} onChange={() => toggleComplete(todo.id)} className="mt-0.5 w-4 h-4 text-indigo-600 rounded border-slate-300 cursor-pointer" />
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2">
-                                <span className={`font-bold text-slate-800 truncate text-xs ${todo.completed ? 'line-through text-slate-400' : ''}`}>{todo.title}</span>
+                                <span className={`font-bold truncate text-xs ${todo.completed ? 'line-through text-slate-400' : ''}`}>{todo.title}</span>
                                 {todo.isEssential && <span className="bg-red-600 text-white font-extrabold text-[9px] px-2 py-0.5 rounded-full shadow-xs animate-pulse flex items-center gap-0.5"><i data-lucide="alert-circle" className="w-3 h-3"></i> 必須</span>}
                                 {todo.isLocked && <span className="text-slate-400" title="ロック中">🔒</span>}
                               </div>
-                              {todo.detail && <p className="text-[11px] text-slate-500 truncate mt-1">{todo.detail}</p>}
-                              <div className="flex items-center gap-2.5 mt-1.5 text-[10px] text-slate-400 font-medium">
+                              {todo.detail && <p className="text-[11px] opacity-70 truncate mt-1">{todo.detail}</p>}
+                              <div className="flex items-center gap-2.5 mt-1.5 text-[10px] opacity-60 font-medium">
                                 {todo.hasTime && todo.time && <span>🕒 {todo.time}</span>}
-                                {todo.tags && todo.tags.map(tag => <span key={tag} className="text-slate-500 bg-slate-100 px-1.5 py-0.2 rounded">#{tag}</span>)}
+                                {todo.tags && todo.tags.map(tag => <span key={tag} className="bg-black/5 px-1.5 py-0.2 rounded">#{tag}</span>)}
                               </div>
                             </div>
                           </div>
                           <div className="flex items-center gap-1">
-                            <button onClick={() => toggleLockTodo(todo.id)} className="text-slate-400 hover:text-indigo-600 p-1 rounded hover:bg-slate-100">{todo.isLocked ? "🔒" : "🔓"}</button>
-                            <button onClick={() => openModalForEdit(todo)} className="text-slate-400 hover:text-indigo-600 p-1.5 rounded-lg hover:bg-slate-100"><i data-lucide="edit-3" className="w-3.5 h-3.5"></i></button>
-                            <button onClick={() => deleteTodo(todo.id)} className="text-slate-400 hover:text-rose-600 p-1.5 rounded-lg hover:bg-slate-100"><i data-lucide="trash-2" className="w-3.5 h-3.5"></i></button>
+                            <button onClick={() => toggleLockTodo(todo.id)} className="opacity-60 hover:opacity-100 p-1 rounded">{todo.isLocked ? "🔒" : "🔓"}</button>
+                            <button onClick={() => openModalForEdit(todo)} className="opacity-60 hover:opacity-100 p-1.5 rounded-lg"><i data-lucide="edit-3" className="w-3.5 h-3.5"></i></button>
+                            <button onClick={() => deleteTodo(todo.id)} className="opacity-60 hover:text-rose-600 p-1.5 rounded-lg"><i data-lucide="trash-2" className="w-3.5 h-3.5"></i></button>
                           </div>
                         </div>
                       </div>
@@ -710,7 +740,7 @@
                   )}
                 </div>
 
-                <div className="bg-amber-50/60 border border-amber-200/80 rounded-2xl p-3.5 space-y-2.5">
+                <div className="bg-amber-50/70 border border-amber-200/80 rounded-2xl p-3.5 space-y-2.5">
                   <div className="flex items-center justify-between">
                     <span className="font-extrabold text-amber-900 text-xs flex items-center gap-1"><i data-lucide="pin" className="w-3.5 h-3.5 text-amber-600"></i>本日の覚え書きメモ</span>
                     <span className="text-[10px] text-amber-600 font-bold">{todayMemos.length}件</span>
@@ -739,9 +769,9 @@
 
             {activeTab === 'todos' && (
               <div className="space-y-3">
-                <div className={`p-3 rounded-2xl space-y-2 ${themeStyles.cardBg}`}>
+                <div className={`p-3 space-y-2 ${themeStyles.cardBg}`}>
                   <div className="relative">
-                    <input type="text" placeholder="タイトルや詳細で文字検索..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-base outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500" />
+                    <input type="text" placeholder="タイトルや詳細で文字検索..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full px-3 py-2 bg-slate-50 border border-slate-200 text-slate-800 rounded-xl text-base outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500" />
                   </div>
                   <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
                     <div className="flex items-center gap-1.5 flex-wrap">
@@ -765,7 +795,7 @@
                   </div>
                   {tags.length > 0 && (
                     <div className="flex items-center gap-1 overflow-x-auto pt-1 border-t border-slate-100">
-                      <span className="text-[10px] text-slate-400 font-bold whitespace-nowrap">タグ:</span>
+                      <span className="text-[10px] opacity-60 font-bold whitespace-nowrap">タグ:</span>
                       <button onClick={() => setSelectedTagFilter('すべて')} className={`px-2 py-0.5 rounded-md text-[10px] font-bold whitespace-nowrap ${selectedTagFilter === 'すべて' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'}`}>すべて</button>
                       {tags.map(tag => (
                         <button key={tag} onClick={() => setSelectedTagFilter(tag)} className={`px-2 py-0.5 rounded-md text-[10px] font-bold whitespace-nowrap ${selectedTagFilter === tag ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'}`}>#{tag}</button>
@@ -776,35 +806,35 @@
 
                 <div className="space-y-2">
                   {filteredTodos.length === 0 ? (
-                    <div className={`p-8 rounded-2xl text-center text-slate-400 text-xs ${themeStyles.cardBg}`}>条件に一致するToDoは見つかりませんでした。</div>
+                    <div className={`p-8 text-center text-slate-400 text-xs ${themeStyles.cardBg}`}>条件に一致するToDoは見つかりませんでした。</div>
                   ) : (
                     filteredTodos.map(todo => {
                       const isSelected = selectedTodoIds.includes(todo.id);
                       return (
-                        <div key={todo.id} className={`p-3 rounded-2xl transition border ${todo.isEssential ? 'bg-gradient-to-r from-red-500/10 via-rose-50 to-white border-red-500 border-2 shadow-md' : `${themeStyles.cardBg}`} ${todo.completed ? 'opacity-40 bg-slate-100' : ''} ${isSelected ? 'ring-2 ring-indigo-500' : ''}`}>
+                        <div key={todo.id} className={`p-3 transition border ${todo.isEssential ? 'bg-gradient-to-r from-red-500/10 via-rose-50 to-white border-red-500 border-2 shadow-md' : `${themeStyles.cardBg}`} ${todo.completed ? 'opacity-40 bg-slate-100' : ''} ${isSelected ? 'ring-2 ring-indigo-500' : ''}`}>
                           <div className="flex items-start justify-between gap-2.5">
                             <div className="flex items-start gap-2.5 flex-1 min-w-0">
                               <input type="checkbox" checked={isSelected} onChange={() => toggleTodoSelect(todo.id)} className="mt-0.5 w-4 h-4 text-indigo-600 rounded border-slate-300 cursor-pointer" />
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2">
-                                  <span onClick={() => toggleComplete(todo.id)} className={`font-bold text-slate-800 text-xs cursor-pointer ${todo.completed ? 'line-through text-slate-400' : ''}`}>{todo.title}</span>
+                                  <span onClick={() => toggleComplete(todo.id)} className={`font-bold text-xs cursor-pointer ${todo.completed ? 'line-through text-slate-400' : ''}`}>{todo.title}</span>
                                   {todo.isEssential && <span className="bg-red-600 text-white font-extrabold text-[9px] px-2 py-0.5 rounded-full shadow-xs animate-pulse flex items-center gap-0.5"><i data-lucide="alert-circle" className="w-3 h-3"></i> 必須</span>}
                                   {todo.isLocked && <span className="text-slate-400" title="ロック中">🔒</span>}
                                 </div>
-                                {todo.detail && <p className="text-[11px] text-slate-500 truncate mt-1">{todo.detail}</p>}
-                                <div className="flex items-center gap-2.5 mt-1.5 text-[10px] text-slate-400 font-medium">
+                                {todo.detail && <p className="text-[11px] opacity-70 truncate mt-1">{todo.detail}</p>}
+                                <div className="flex items-center gap-2.5 mt-1.5 text-[10px] opacity-60 font-medium">
                                   {todo.hasDate !== false ? (
                                     <span>📅 {todo.dateMode === 'specific' ? `指定日(${todo.specificDates?.length || 0}日)` : `${todo.startDate} 〜 ${todo.endDate}`}</span>
                                   ) : <span className="text-amber-600 font-bold">期限なし</span>}
                                   {todo.hasTime && todo.time && <span>🕒 {todo.time}</span>}
-                                  {todo.tags && todo.tags.map(tag => <span key={tag} className="text-slate-500 bg-slate-100 px-1.5 py-0.2 rounded">#{tag}</span>)}
+                                  {todo.tags && todo.tags.map(tag => <span key={tag} className="bg-black/5 px-1.5 py-0.2 rounded">#{tag}</span>)}
                                 </div>
                               </div>
                             </div>
                             <div className="flex items-center gap-1">
-                              <button onClick={() => toggleLockTodo(todo.id)} className="text-slate-400 hover:text-indigo-600 p-1 rounded hover:bg-slate-100">{todo.isLocked ? "🔒" : "🔓"}</button>
-                              <button onClick={() => openModalForEdit(todo)} className="text-slate-400 hover:text-indigo-600 p-1.5 rounded-lg hover:bg-slate-100"><i data-lucide="edit-3" className="w-3.5 h-3.5"></i></button>
-                              <button onClick={() => deleteTodo(todo.id)} className="text-slate-400 hover:text-rose-600 p-1.5 rounded-lg hover:bg-slate-100"><i data-lucide="trash-2" className="w-3.5 h-3.5"></i></button>
+                              <button onClick={() => toggleLockTodo(todo.id)} className="opacity-60 hover:opacity-100 p-1 rounded">{todo.isLocked ? "🔒" : "🔓"}</button>
+                              <button onClick={() => openModalForEdit(todo)} className="opacity-60 hover:opacity-100 p-1.5 rounded-lg"><i data-lucide="edit-3" className="w-3.5 h-3.5"></i></button>
+                              <button onClick={() => deleteTodo(todo.id)} className="opacity-60 hover:text-rose-600 p-1.5 rounded-lg"><i data-lucide="trash-2" className="w-3.5 h-3.5"></i></button>
                             </div>
                           </div>
                         </div>
@@ -817,26 +847,26 @@
 
             {activeTab === 'memos' && (
               <div className="space-y-3.5">
-                <div className={`p-4 rounded-2xl space-y-3 ${themeStyles.cardBg}`}>
-                  <span className="font-extrabold text-slate-800 text-xs flex items-center gap-1.5"><i data-lucide="sticky-note" className="w-4 h-4 text-indigo-600"></i>自由な覚え書きメモ帳</span>
+                <div className={`p-4 space-y-3 ${themeStyles.cardBg}`}>
+                  <span className="font-extrabold text-xs flex items-center gap-1.5"><i data-lucide="sticky-note" className="w-4 h-4 text-indigo-600"></i>自由な覚え書きメモ帳</span>
                   <div className="flex gap-2">
-                    <input type="text" placeholder="買いたいものや気になったメモを入力..." value={newQuickMemo} onChange={(e) => setNewQuickMemo(e.target.value)} className="flex-1 px-3 py-2 border border-slate-200 rounded-xl text-base outline-none focus:ring-2 focus:ring-indigo-500" onKeyDown={(e) => { if (e.key === 'Enter') handleAddMemo(); }} />
+                    <input type="text" placeholder="買いたいものや気になったメモを入力..." value={newQuickMemo} onChange={(e) => setNewQuickMemo(e.target.value)} className="flex-1 px-3 py-2 border border-slate-200 text-slate-800 rounded-xl text-base outline-none focus:ring-2 focus:ring-indigo-500" onKeyDown={(e) => { if (e.key === 'Enter') handleAddMemo(); }} />
                     <button onClick={() => handleAddMemo()} className={`px-4 py-2 rounded-xl text-xs font-bold shadow-xs ${themeStyles.primaryBtn}`}>追加</button>
                   </div>
                 </div>
                 <div className="space-y-2">
                   {memos.length === 0 ? (
-                    <div className={`p-8 rounded-2xl text-center text-slate-400 text-xs ${themeStyles.cardBg}`}>メモはありません。</div>
+                    <div className={`p-8 text-center text-slate-400 text-xs ${themeStyles.cardBg}`}>メモはありません。</div>
                   ) : (
                     memos.map(memo => (
-                      <div key={memo.id} className={`p-3 rounded-2xl flex items-center justify-between shadow-2xs ${themeStyles.cardBg}`}>
+                      <div key={memo.id} className={`p-3 flex items-center justify-between shadow-2xs ${themeStyles.cardBg}`}>
                         <div className="flex items-center gap-2.5 flex-1 min-w-0">
                           <input type="checkbox" checked={memo.completed} onChange={() => toggleMemoComplete(memo.id)} className="w-4 h-4 text-indigo-600 rounded border-slate-300 cursor-pointer" />
-                          <span className={`text-xs text-slate-800 font-semibold truncate ${memo.completed ? 'line-through text-slate-300' : ''}`}>{memo.text}</span>
+                          <span className={`text-xs font-semibold truncate ${memo.completed ? 'line-through text-slate-300' : ''}`}>{memo.text}</span>
                         </div>
                         <div className="flex items-center gap-2">
                           <button onClick={() => promoteMemoToTodo(memo)} className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-2.5 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1"><i data-lucide="calendar-plus" className="w-3.5 h-3.5"></i> カレンダーに予定化</button>
-                          <button onClick={() => deleteMemo(memo.id)} className="text-slate-300 hover:text-rose-600 p-1"><i data-lucide="trash-2" className="w-3.5 h-3.5"></i></button>
+                          <button onClick={() => deleteMemo(memo.id)} className="opacity-60 hover:text-rose-600 p-1"><i data-lucide="trash-2" className="w-3.5 h-3.5"></i></button>
                         </div>
                       </div>
                     ))
@@ -849,9 +879,9 @@
           {/* カレンダーモーダル */}
           {isCalendarOpen && (
             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 z-50">
-              <div className="bg-white rounded-2xl w-full max-w-md p-4 shadow-2xl border border-slate-100">
+              <div className="bg-white text-slate-800 rounded-2xl w-full max-w-md p-4 shadow-2xl border border-slate-100">
                 <div className="flex items-center justify-between mb-3 border-b pb-2">
-                  <div className="flex items-center gap-1.5"><i data-lucide="calendar" className="w-4 h-4 text-indigo-600"></i><span className="font-extrabold text-slate-800 text-sm">{year}年 {month + 1}月</span></div>
+                  <div className="flex items-center gap-1.5"><i data-lucide="calendar" className="w-4 h-4 text-indigo-600"></i><span className="font-extrabold text-sm">{year}年 {month + 1}月</span></div>
                   <div className="flex items-center gap-1">
                     <button onClick={() => setCurrentDate(new Date(year, month - 1, 1))} className="px-2 py-1 border rounded-lg text-[10px] font-bold hover:bg-slate-50">前月</button>
                     <button onClick={() => setCurrentDate(new Date())} className="px-2 py-1 border rounded-lg text-[10px] font-bold hover:bg-slate-50">今月</button>
@@ -904,9 +934,9 @@
 
             return (
               <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 z-50">
-                <div className="bg-white rounded-2xl w-full max-w-sm p-4 shadow-2xl border border-slate-100 space-y-3 max-h-[85vh] flex flex-col">
+                <div className="bg-white text-slate-800 rounded-2xl w-full max-w-sm p-4 shadow-2xl border border-slate-100 space-y-3 max-h-[85vh] flex flex-col">
                   <div className="flex items-center justify-between border-b pb-2">
-                    <h3 className="font-extrabold text-slate-800 text-xs">📅 {dateStr} の登録内容</h3>
+                    <h3 className="font-extrabold text-xs">📅 {dateStr} の登録内容</h3>
                     <button onClick={() => setSelectedDayDetailDate(null)} className="text-slate-400 p-0.5"><i data-lucide="x" className="w-4 h-4"></i></button>
                   </div>
 
@@ -953,8 +983,12 @@
                     )}
                   </div>
 
-                  <div className="pt-2 border-t flex justify-between">
-                    <button onClick={() => { setSelectedDayDetailDate(null); setIsCalendarOpen(false); openModalForCreateFromDate(dateStr); }} className="bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold">＋ この日にToDo追加</button>
+                  <div className="pt-2 border-t flex justify-between gap-2">
+                    <button onClick={() => {
+                      const target = selectedDayDetailDate;
+                      setSelectedDayDetailDate(null);
+                      openModalForCreateFromDate(target);
+                    }} className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition flex-1">＋ この日にToDo追加</button>
                     <button onClick={() => setSelectedDayDetailDate(null)} className="px-3 py-1.5 border rounded-lg text-xs font-bold">閉じる</button>
                   </div>
                 </div>
@@ -965,9 +999,9 @@
           {/* Todo作成・編集モーダル */}
           {isModalOpen && (
             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 z-50">
-              <div className="bg-white rounded-2xl w-full max-w-sm p-4 shadow-2xl border border-slate-100 max-h-[90vh] overflow-y-auto">
+              <div className="bg-white text-slate-800 rounded-2xl w-full max-w-sm p-4 shadow-2xl border border-slate-100 max-h-[90vh] overflow-y-auto">
                 <div className="flex items-center justify-between mb-3">
-                  <h2 className="text-xs font-bold text-slate-800">{editingTodo ? 'ToDoの編集・削除' : '新規ToDo作成'}</h2>
+                  <h2 className="text-xs font-bold">{editingTodo ? 'ToDoの編集・削除' : '新規ToDo作成'}</h2>
                   {editingTodo && (
                     <button type="button" onClick={() => deleteTodo(editingTodo.id)} className="text-rose-600 hover:bg-rose-50 px-2 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 transition">
                       <i data-lucide="trash-2" className="w-3.5 h-3.5"></i>削除
@@ -1019,7 +1053,7 @@
                           </div>
                         )}
 
-                        {/* インラインミニカレンダーピッカー */}
+                        {/* ミニカレンダーピッカー */}
                         {isPickerOpen && (
                           <div className="bg-white border p-2 rounded-xl space-y-2 shadow-sm">
                             <div className="flex items-center justify-between text-xs font-bold">
@@ -1108,9 +1142,9 @@
           {/* イベント / 休日登録・編集モーダル */}
           {isEventModalOpen && (
             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 z-50">
-              <div className="bg-white rounded-2xl w-full max-w-sm p-4 shadow-2xl border border-slate-100 space-y-3">
+              <div className="bg-white text-slate-800 rounded-2xl w-full max-w-sm p-4 shadow-2xl border border-slate-100 space-y-3">
                 <div className="flex items-center justify-between border-b pb-2">
-                  <h2 className="text-xs font-bold text-slate-800">{editingEvent || editingHoliday ? '🎉 予定・休日の編集' : '🎉 予定・休日設定'}</h2>
+                  <h2 className="text-xs font-bold">{editingEvent || editingHoliday ? '🎉 予定・休日の編集' : '🎉 予定・休日設定'}</h2>
                   <div className="flex items-center gap-1">
                     {(editingEvent || editingHoliday) && (
                       <button type="button" onClick={() => { if (editingEvent) deleteEvent(editingEvent.id); if (editingHoliday) deleteHoliday(editingHoliday.id); }} className="text-rose-600 hover:bg-rose-50 px-2 py-1 rounded-lg text-[10px] font-bold">削除</button>
@@ -1173,9 +1207,9 @@
           {/* 設定モーダル */}
           {isSettingsOpen && (
             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 z-50">
-              <div className="bg-white rounded-2xl w-full max-w-xs p-4 shadow-2xl border border-slate-100 space-y-4">
+              <div className="bg-white text-slate-800 rounded-2xl w-full max-w-xs p-4 shadow-2xl border border-slate-100 space-y-4">
                 <div className="flex items-center justify-between border-b pb-2">
-                  <h2 className="text-xs font-bold text-slate-800">設定・テーマ変更</h2>
+                  <h2 className="text-xs font-bold">設定・テーマ変更</h2>
                   <button onClick={() => setIsSettingsOpen(false)} className="text-slate-400 p-0.5"><i data-lucide="x" className="w-4 h-4"></i></button>
                 </div>
                 <div className="space-y-1.5">
@@ -1221,9 +1255,9 @@
           {/* ゴミ箱モーダル */}
           {isTrashOpen && (
             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 z-50">
-              <div className="bg-white rounded-2xl w-full max-w-sm p-4 shadow-2xl border border-slate-100 space-y-3">
+              <div className="bg-white text-slate-800 rounded-2xl w-full max-w-sm p-4 shadow-2xl border border-slate-100 space-y-3">
                 <div className="flex items-center justify-between border-b pb-2">
-                  <div className="flex items-center gap-1.5"><i data-lucide="trash-2" className="w-4 h-4 text-rose-500"></i><h2 className="text-xs font-bold text-slate-800">ゴミ箱 (24時間以内なら復元可能)</h2></div>
+                  <div className="flex items-center gap-1.5"><i data-lucide="trash-2" className="w-4 h-4 text-rose-500"></i><h2 className="text-xs font-bold">ゴミ箱 (24時間以内なら復元可能)</h2></div>
                   <button onClick={() => setIsTrashOpen(false)} className="text-slate-400 p-0.5"><i data-lucide="x" className="w-4 h-4"></i></button>
                 </div>
                 <div className="space-y-2 max-h-64 overflow-y-auto">
@@ -1250,8 +1284,8 @@
           {/* 新規リスト作成モーダル */}
           {isNewListModalOpen && (
             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 z-50">
-              <div className="bg-white rounded-2xl w-full max-w-xs p-4 shadow-2xl border border-slate-100">
-                <h2 className="text-xs font-bold text-slate-800 mb-2">新規リスト作成</h2>
+              <div className="bg-white text-slate-800 rounded-2xl w-full max-w-xs p-4 shadow-2xl border border-slate-100">
+                <h2 className="text-xs font-bold mb-2">新規リスト作成</h2>
                 <form onSubmit={handleCreateList} className="space-y-2.5">
                   <input type="text" value={newListName} onChange={(e) => setNewListName(e.target.value)} className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-base outline-none font-bold" placeholder="リスト名" required />
                   <div className="flex justify-end gap-1.5 pt-1">
