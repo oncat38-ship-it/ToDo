@@ -316,7 +316,6 @@
         await setDoc(docRef, payload, { merge: true });
       };
 
-      // 自由入力IDをメールアドレス風の内部形式に変換してFirebase認証を通す
       const formatEmailFromId = (id) => `${id.trim().toLowerCase()}@app.local`;
 
       const handleAuthSubmit = async (e) => {
@@ -330,6 +329,11 @@
           return;
         }
 
+        if (cleanPass.length < 6) {
+          setAuthError('パスワードは6文字以上で入力してください');
+          return;
+        }
+
         const internalEmail = formatEmailFromId(cleanId);
         const { auth, signInWithEmailAndPassword, createUserWithEmailAndPassword } = window.firebaseApp;
 
@@ -340,7 +344,16 @@
             await signInWithEmailAndPassword(auth, internalEmail, cleanPass);
           }
         } catch (err) {
-          setAuthError('認証エラー: ' + (authMode === 'signup' ? 'このIDは既に使われているか無効です' : 'IDまたはパスワードが違います'));
+          const code = err.code || '';
+          if (code === 'auth/operation-not-allowed') {
+            setAuthError('⚠️ Firebase Consoleで「メール/パスワード認証」が無効になっています。設定を有効にしてください。');
+          } else if (code === 'auth/email-already-in-use') {
+            setAuthError('このIDは既に使用されています。別のIDをお試しください。');
+          } else if (code === 'auth/invalid-credential' || code === 'auth/user-not-found' || code === 'auth/wrong-password') {
+            setAuthError('IDまたはパスワードが正しくありません。');
+          } else {
+            setAuthError(`エラー (${code || err.message})`);
+          }
         }
       };
 
@@ -512,36 +525,6 @@
 
       const closeModal = () => { setIsModalOpen(false); setEditingTodo(null); };
 
-      const handlePickerDateClick = (dateStr) => {
-        if (formDateMode === 'range') {
-          if (formStartDate === dateStr && formEndDate === dateStr) {
-            setFormStartDate(''); setFormEndDate('');
-          } else if (formStartDate === dateStr && !formEndDate) {
-            setFormStartDate('');
-          } else if (formEndDate === dateStr) {
-            setFormEndDate('');
-          } else if (!formStartDate) {
-            setFormStartDate(dateStr);
-          } else if (!formEndDate) {
-            if (dateStr < formStartDate) {
-              setFormEndDate(formStartDate);
-              setFormStartDate(dateStr);
-            } else {
-              setFormEndDate(dateStr);
-            }
-          } else {
-            setFormStartDate(dateStr);
-            setFormEndDate('');
-          }
-        } else {
-          if (formSpecificDates.includes(dateStr)) {
-            setFormSpecificDates(formSpecificDates.filter(d => d !== dateStr));
-          } else {
-            setFormSpecificDates([...formSpecificDates, dateStr].sort());
-          }
-        }
-      };
-
       const todayObj = new Date();
       const todayStr = todayObj.toISOString().split('T')[0];
       const currentYear = todayObj.getFullYear();
@@ -588,7 +571,6 @@
       const todayEvents = events.filter(e => e.date === todayStr);
       const todayHolidays = holidays.filter(h => h.date === todayStr);
       const todayWorkHours = workHours[todayStr];
-      const overdueTodos = currentListTodos.filter(t => t.hasDate !== false && t.dateMode === 'range' && t.endDate < todayStr && !t.completed);
 
       const dayOfWeekStr = ['日', '月', '火', '水', '木', '金', '土'][todayObj.getDay()];
       const formattedToday = `${todayObj.getMonth() + 1}月${todayObj.getDate()}日 (${dayOfWeekStr})`;
@@ -633,10 +615,18 @@
                 <h1 className="text-xl font-extrabold tracking-tight">TaskFlow (Cloud Sync)</h1>
                 <p className="text-xs text-slate-400 mt-1">{authMode === 'login' ? 'ログイン' : '新規アカウント登録'}</p>
               </div>
-              {authError && <div className="mb-4 p-2.5 bg-rose-500/10 border border-rose-500/30 text-rose-400 rounded-xl text-xs text-center font-medium">{authError}</div>}
+
+              {authError && <div className="mb-4 p-3 bg-rose-500/10 border border-rose-500/30 text-rose-400 rounded-xl text-xs font-medium leading-relaxed">{authError}</div>}
+
               <form onSubmit={handleAuthSubmit} className="space-y-3.5">
-                <input type="text" value={customIdInput} onChange={(e) => setCustomIdInput(e.target.value)} className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm outline-none focus:border-blue-500 text-slate-100 font-bold" placeholder="自由入力ID (例: user123)" required />
-                <input type="password" value={passwordInput} onChange={(e) => setPasswordInput(e.target.value)} className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm outline-none focus:border-blue-500 text-slate-100" placeholder="パスワード" required />
+                <div>
+                  <label className="block text-[10px] text-slate-400 mb-1 font-bold">ユーザーID</label>
+                  <input type="text" value={customIdInput} onChange={(e) => setCustomIdInput(e.target.value)} className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm outline-none focus:border-blue-500 text-slate-100 font-bold" placeholder="例: user123" required />
+                </div>
+                <div>
+                  <label className="block text-[10px] text-slate-400 mb-1 font-bold">パスワード (6文字以上)</label>
+                  <input type="password" value={passwordInput} onChange={(e) => setPasswordInput(e.target.value)} className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm outline-none focus:border-blue-500 text-slate-100" placeholder="••••••••" required />
+                </div>
                 <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white py-2.5 rounded-xl text-xs font-bold shadow-lg shadow-blue-600/30 transition hover-scale">{authMode === 'login' ? 'ログイン' : '登録して開始'}</button>
               </form>
               <div className="mt-6 text-center border-t border-slate-800 pt-4">
