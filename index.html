@@ -181,6 +181,7 @@
       const [isEventModalOpen, setIsEventModalOpen] = useState(false);
       
       const [selectedDayDetailDate, setSelectedDayDetailDate] = useState(null);
+      const [isEditingWorkHours, setIsEditingWorkHours] = useState(false);
 
       const [workStartInput, setWorkStartInput] = useState('09:00');
       const [workEndInput, setWorkEndInput] = useState('18:00');
@@ -199,7 +200,6 @@
       const [pickerYear, setPickerYear] = useState(new Date().getFullYear());
       const [pickerMonth, setPickerMonth] = useState(new Date().getMonth());
 
-      const [selectedTodoIds, setSelectedTodoIds] = useState([]);
       const [newQuickMemo, setNewQuickMemo] = useState('');
 
       const [editingTodo, setEditingTodo] = useState(null);
@@ -221,7 +221,6 @@
       const [eventIcon, setEventIcon] = useState('🎉');
       const [eventDate, setEventDate] = useState(new Date().toISOString().split('T')[0]);
       const [holidayMember, setHolidayMember] = useState('自分');
-      const [newMemberInput, setNewMemberInput] = useState('');
 
       const [currentDate, setCurrentDate] = useState(new Date());
       const [weather, setWeather] = useState({ text: '読み込み中...', icon: '🌤️' });
@@ -351,7 +350,7 @@
           if (code === 'auth/operation-not-allowed') {
             setAuthError('⚠️ Firebase Consoleで「メール/パスワード認証」が無効になっています。設定を有効にしてください。');
           } else if (code === 'auth/email-already-in-use') {
-            setAuthError('このIDは既に使用されています。別のIDをお試しくさい。');
+            setAuthError('このIDは既に使用されています。別のIDをお試しください。');
           } else if (code === 'auth/invalid-credential' || code === 'auth/user-not-found' || code === 'auth/wrong-password') {
             setAuthError('IDまたはパスワードが正しくありません。');
           } else {
@@ -402,6 +401,7 @@
         };
         setWorkHours(nextHours);
         saveUserDataToFirebase({ workHours: nextHours });
+        setIsEditingWorkHours(false);
       };
 
       const handleClearWorkHours = (dateStr) => {
@@ -409,6 +409,7 @@
         delete nextHours[dateStr];
         setWorkHours(nextHours);
         saveUserDataToFirebase({ workHours: nextHours });
+        setIsEditingWorkHours(false);
       };
 
       const handleSaveTodo = (e) => {
@@ -606,15 +607,6 @@
       };
 
       const closeModal = () => { setIsModalOpen(false); setEditingTodo(null); };
-
-      const handleAddTag = () => {
-        if (newTagInput.trim() && !tags.includes(newTagInput.trim())) {
-          const nextTags = [...tags, newTagInput.trim()];
-          setTags(nextTags);
-          saveUserDataToFirebase({ tags: nextTags });
-          setNewTagInput('');
-        }
-      };
 
       const handleCreateList = (e) => {
         e.preventDefault();
@@ -1005,6 +997,7 @@
                     return (
                       <div key={item.dateStr} onClick={() => {
                         setSelectedDayDetailDate(item.dateStr);
+                        setIsEditingWorkHours(false);
                         if (dayWork) { setWorkStartInput(dayWork.start); setWorkEndInput(dayWork.end); }
                         else { setWorkStartInput('09:00'); setWorkEndInput('18:00'); }
                       }} className={`p-1 flex flex-col justify-between transition cursor-pointer overflow-hidden relative ${isToday ? themeStyles.todayCell : 'bg-white hover:bg-indigo-50/50'} ${hasEssential ? 'ring-2 ring-inset ring-red-400' : ''}`}>
@@ -1032,7 +1025,7 @@
             </div>
           )}
 
-          {/* カレンダー日付詳細ポップアップ */}
+          {/* カレンダー日付詳細ポップアップ (仕事時間の切り替え式表示) */}
           {selectedDayDetailDate && (() => {
             const dateStr = selectedDayDetailDate;
             const dayTodos = currentListTodos.filter(t => isTodoActiveOnDate(t, dateStr));
@@ -1044,21 +1037,42 @@
               <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-3 z-50">
                 <div className="bg-white text-slate-900 rounded-3xl w-full max-w-sm p-5 shadow-2xl border space-y-3.5 max-h-[85vh] flex flex-col animate-modal">
                   <div className="flex items-center justify-between border-b pb-2.5">
-                    <h3 className="font-extrabold text-xs">📅 {dateStr} の詳細・仕事時間</h3>
+                    <h3 className="font-extrabold text-xs">📅 {dateStr} の詳細</h3>
                     <button onClick={() => setSelectedDayDetailDate(null)} className="opacity-60 hover:opacity-100 p-1"><i data-lucide="x" className="w-4 h-4"></i></button>
                   </div>
 
+                  {/* 仕事・活動時間ブロック */}
                   <div className="bg-blue-50/80 border border-blue-200 p-3 rounded-2xl space-y-2">
-                    <label className="block text-[10px] font-extrabold text-blue-900">💼 仕事・活動時間の設定</label>
-                    <div className="flex items-center gap-1.5">
-                      <input type="time" value={workStartInput} onChange={(e) => setWorkStartInput(e.target.value)} className="bg-white border border-blue-200 rounded-xl px-2 py-1 text-xs font-bold" />
-                      <span className="text-xs font-bold text-blue-900">〜</span>
-                      <input type="time" value={workEndInput} onChange={(e) => setWorkEndInput(e.target.value)} className="bg-white border border-blue-200 rounded-xl px-2 py-1 text-xs font-bold" />
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-extrabold text-blue-900">💼 仕事・活動時間</span>
+                      {!isEditingWorkHours ? (
+                        <button onClick={() => {
+                          if (dayWork) { setWorkStartInput(dayWork.start); setWorkEndInput(dayWork.end); }
+                          else { setWorkStartInput('09:00'); setWorkEndInput('18:00'); }
+                          setIsEditingWorkHours(true);
+                        }} className="text-[10px] font-bold text-blue-600 bg-white px-2 py-0.5 rounded-lg border border-blue-200 shadow-2xs">変更</button>
+                      ) : (
+                        <button onClick={() => setIsEditingWorkHours(false)} className="text-[10px] font-bold text-slate-500">キャンセル</button>
+                      )}
                     </div>
-                    <div className="flex gap-2 pt-1">
-                      <button onClick={() => handleSaveWorkHours(dateStr)} className="bg-blue-600 text-white px-3 py-1 rounded-xl text-[10px] font-bold shadow-xs flex-1">保存</button>
-                      {dayWork && <button onClick={() => handleClearWorkHours(dateStr)} className="bg-rose-500/20 text-rose-600 px-3 py-1 rounded-xl text-[10px] font-bold">解除</button>}
-                    </div>
+
+                    {!isEditingWorkHours ? (
+                      <div className="text-xs font-bold text-blue-950 py-1">
+                        {dayWork ? `${dayWork.start} 〜 ${dayWork.end}` : '未設定 (クリックして変更)'}
+                      </div>
+                    ) : (
+                      <div className="space-y-2 pt-1">
+                        <div className="flex items-center gap-1.5">
+                          <input type="time" value={workStartInput} onChange={(e) => setWorkStartInput(e.target.value)} className="bg-white border border-blue-200 rounded-xl px-2 py-1 text-xs font-bold" />
+                          <span className="text-xs font-bold text-blue-900">〜</span>
+                          <input type="time" value={workEndInput} onChange={(e) => setWorkEndInput(e.target.value)} className="bg-white border border-blue-200 rounded-xl px-2 py-1 text-xs font-bold" />
+                        </div>
+                        <div className="flex gap-2 pt-1">
+                          <button onClick={() => handleSaveWorkHours(dateStr)} className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1 rounded-xl text-[10px] font-bold shadow-xs flex-1">保存</button>
+                          {dayWork && <button onClick={() => handleClearWorkHours(dateStr)} className="bg-rose-500/20 text-rose-600 px-3 py-1 rounded-xl text-[10px] font-bold">解除</button>}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <div className="space-y-2 overflow-y-auto flex-1 pr-1">
@@ -1106,66 +1120,6 @@
                 <form onSubmit={handleSaveTodo} className="space-y-3">
                   <input type="text" value={formTitle} onChange={(e) => setFormTitle(e.target.value)} className="w-full px-3.5 py-2.5 bg-black/5 border rounded-2xl text-sm font-bold" placeholder="タイトル" required />
                   <textarea value={formDetail} onChange={(e) => setFormDetail(e.target.value)} className="w-full px-3.5 py-2.5 bg-black/5 border rounded-2xl text-sm h-20" placeholder="詳細メモ..." />
-
-                  <div className="bg-black/5 p-3 rounded-2xl border space-y-2.5">
-                    <div className="flex items-center justify-between">
-                      <label className="text-xs font-bold opacity-80">日付・期間を設定</label>
-                      <input type="checkbox" checked={formHasDate} onChange={(e) => setFormHasDate(e.target.checked)} className="w-4 h-4 text-indigo-600 rounded" />
-                    </div>
-
-                    {formHasDate && (
-                      <div className="space-y-2.5 pt-1">
-                        <div className="flex bg-black/10 p-0.5 rounded-xl text-[11px] font-bold">
-                          <button type="button" onClick={() => setFormDateMode('range')} className={`flex-1 py-1 rounded-lg ${formDateMode === 'range' ? 'bg-white' : 'opacity-60'}`}>期間</button>
-                          <button type="button" onClick={() => setFormDateMode('specific')} className={`flex-1 py-1 rounded-lg ${formDateMode === 'specific' ? 'bg-white' : 'opacity-60'}`}>複数日</button>
-                        </div>
-                        <div onClick={() => setIsPickerOpen(!isPickerOpen)} className="flex items-center justify-between bg-white px-3.5 py-2.5 border rounded-2xl cursor-pointer">
-                          <span className="text-xs font-bold truncate">{formStartDate ? `${formStartDate} 〜 ${formEndDate || formStartDate}` : '📅 日付を選択'}</span>
-                          <i data-lucide="chevron-down" className="w-4 h-4 opacity-50"></i>
-                        </div>
-                        {isPickerOpen && (
-                          <div className="bg-white border p-3 rounded-2xl space-y-2">
-                            <div className="flex justify-between text-xs font-bold">
-                              <span>{pickerYear}年 {pickerMonth + 1}月</span>
-                              <div className="flex gap-1">
-                                <button type="button" onClick={() => setPickerMonth(pickerMonth === 0 ? 11 : pickerMonth - 1)}>◀</button>
-                                <button type="button" onClick={() => setPickerMonth(pickerMonth === 11 ? 0 : pickerMonth + 1)}>▶</button>
-                              </div>
-                            </div>
-                            <div className="grid grid-cols-7 gap-1 text-center font-bold text-[10px] opacity-50">
-                              <span className="text-rose-500">日</span><span>月</span><span>火</span><span>水</span><span>木</span><span>金</span><span className="text-blue-500">土</span>
-                            </div>
-                            <div className="grid grid-cols-7 gap-1">
-                              {(() => {
-                                const fDay = new Date(pickerYear, pickerMonth, 1).getDay();
-                                const lDate = new Date(pickerYear, pickerMonth + 1, 0).getDate();
-                                const days = [];
-                                for(let i=0; i<fDay; i++) days.push(<div key={`e-${i}`}></div>);
-                                for(let i=1; i<=lDate; i++) {
-                                  const dStr = `${pickerYear}-${String(pickerMonth+1).padStart(2,'0')}-${String(i).padStart(2,'0')}`;
-                                  days.push(
-                                    <button key={dStr} type="button" onClick={() => handlePickerDateClick(dStr)} className={`h-8 rounded-xl text-xs font-bold ${dStr === formStartDate ? 'bg-indigo-600 text-white' : 'bg-black/5'}`}>{i}</button>
-                                  );
-                                }
-                                return days;
-                              })()}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="flex items-center justify-between px-1">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input type="checkbox" checked={formIsEssential} onChange={(e) => setFormIsEssential(e.target.checked)} className="w-4 h-4 text-red-600" />
-                      <span className="text-xs font-bold text-red-500">必須</span>
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input type="checkbox" checked={formIsLocked} onChange={(e) => setFormIsLocked(e.target.checked)} className="w-4 h-4 text-slate-700" />
-                      <span className="text-xs font-bold">🔒 ロック</span>
-                    </label>
-                  </div>
 
                   <div className="flex justify-end gap-2 pt-3 border-t">
                     <button type="button" onClick={closeModal} className="px-4 py-2 border rounded-xl text-xs font-bold">キャンセル</button>
@@ -1292,7 +1246,7 @@
               <div className="bg-white rounded-3xl w-full max-w-sm p-5 shadow-2xl border space-y-3">
                 <h2 className="text-xs font-bold">新規リスト作成</h2>
                 <form onSubmit={handleCreateList} className="space-y-3">
-                  <input type="text" value={newListName} onChange={(e) => setNewListName(e.target.value)} className="w-full px-3.5 py-2.5 border rounded-2xl text-sm font-bold" placeholder="リスト名" required />
+                  <input type="text" value={newListName} onChange={(e) => setNewListName(e.target.value)} className="w-full px-3.5 py-2.5 border rounded-2xl text-5 font-bold" placeholder="リスト名" required />
                   <div className="flex justify-end gap-2">
                     <button type="button" onClick={() => setIsNewListModalOpen(false)} className="px-4 py-2 border rounded-xl text-xs font-bold">キャンセル</button>
                     <button type="submit" className={`px-4 py-2 rounded-xl text-xs font-bold ${themeStyles.primaryBtn}`}>作成</button>
