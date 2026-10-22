@@ -58,7 +58,7 @@
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
     import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, updatePassword } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-    import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+    import { getFirestore, doc, setDoc, getDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyAoNZm6KwPQuWbC0W65sOh4soLMx1UoUrQ",
@@ -74,7 +74,7 @@
     const auth = getAuth(app);
     const db = getFirestore(app);
 
-    window.firebaseApp = { auth, db, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, doc, setDoc, onSnapshot, updatePassword };
+    window.firebaseApp = { auth, db, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, doc, setDoc, getDoc, onSnapshot, updatePassword };
   </script>
 
   <script type="text/babel">
@@ -144,7 +144,7 @@
       const [authMode, setAuthMode] = useState('login'); 
       const [isLoggedIn, setIsLoggedIn] = useState(false);
       const [currentUser, setCurrentUser] = useState(null);
-      const [emailInput, setEmailInput] = useState('');
+      const [customIdInput, setCustomIdInput] = useState('');
       const [passwordInput, setPasswordInput] = useState('');
       const [authError, setAuthError] = useState('');
 
@@ -159,7 +159,7 @@
       const [tags, setTags] = useState([]);
 
       const [events, setEvents] = useState([]);
-      const [workHours, setWorkHours] = useState({}); // { '2026-10-22': { start: '09:00', end: '18:00' } }
+      const [workHours, setWorkHours] = useState({});
       const [payday, setPayday] = useState('25');
       const [paydayAdjustment, setPaydayAdjustment] = useState('prev');
       const [holidays, setHolidays] = useState([]);
@@ -182,7 +182,6 @@
       
       const [selectedDayDetailDate, setSelectedDayDetailDate] = useState(null);
 
-      // 仕事時間編集入力用
       const [workStartInput, setWorkStartInput] = useState('09:00');
       const [workEndInput, setWorkEndInput] = useState('18:00');
 
@@ -317,19 +316,31 @@
         await setDoc(docRef, payload, { merge: true });
       };
 
+      // 自由入力IDをメールアドレス風の内部形式に変換してFirebase認証を通す
+      const formatEmailFromId = (id) => `${id.trim().toLowerCase()}@app.local`;
+
       const handleAuthSubmit = async (e) => {
         e.preventDefault();
         setAuthError('');
+        const cleanId = customIdInput.trim();
+        const cleanPass = passwordInput.trim();
+
+        if (!cleanId || !cleanPass) {
+          setAuthError('IDとパスワードを入力してください');
+          return;
+        }
+
+        const internalEmail = formatEmailFromId(cleanId);
         const { auth, signInWithEmailAndPassword, createUserWithEmailAndPassword } = window.firebaseApp;
 
         try {
           if (authMode === 'signup') {
-            await createUserWithEmailAndPassword(auth, emailInput, passwordInput);
+            await createUserWithEmailAndPassword(auth, internalEmail, cleanPass);
           } else {
-            await signInWithEmailAndPassword(auth, emailInput, passwordInput);
+            await signInWithEmailAndPassword(auth, internalEmail, cleanPass);
           }
         } catch (err) {
-          setAuthError('認証エラー: ' + err.message);
+          setAuthError('認証エラー: ' + (authMode === 'signup' ? 'このIDは既に使われているか無効です' : 'IDまたはパスワードが違います'));
         }
       };
 
@@ -624,7 +635,7 @@
               </div>
               {authError && <div className="mb-4 p-2.5 bg-rose-500/10 border border-rose-500/30 text-rose-400 rounded-xl text-xs text-center font-medium">{authError}</div>}
               <form onSubmit={handleAuthSubmit} className="space-y-3.5">
-                <input type="email" value={emailInput} onChange={(e) => setEmailInput(e.target.value)} className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm outline-none focus:border-blue-500 text-slate-100" placeholder="メールアドレス" required />
+                <input type="text" value={customIdInput} onChange={(e) => setCustomIdInput(e.target.value)} className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm outline-none focus:border-blue-500 text-slate-100 font-bold" placeholder="自由入力ID (例: user123)" required />
                 <input type="password" value={passwordInput} onChange={(e) => setPasswordInput(e.target.value)} className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm outline-none focus:border-blue-500 text-slate-100" placeholder="パスワード" required />
                 <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white py-2.5 rounded-xl text-xs font-bold shadow-lg shadow-blue-600/30 transition hover-scale">{authMode === 'login' ? 'ログイン' : '登録して開始'}</button>
               </form>
@@ -861,7 +872,7 @@
             </div>
           )}
 
-          {/* カレンダー日付詳細 & 仕事時間設定ポップアップ */}
+          {/* カレンダー日付詳細ポップアップ */}
           {selectedDayDetailDate && (() => {
             const dateStr = selectedDayDetailDate;
             const dayTodos = currentListTodos.filter(t => isTodoActiveOnDate(t, dateStr));
@@ -877,7 +888,6 @@
                     <button onClick={() => setSelectedDayDetailDate(null)} className="opacity-60 hover:opacity-100 p-1"><i data-lucide="x" className="w-4 h-4"></i></button>
                   </div>
 
-                  {/* 仕事・活動時間設定 */}
                   <div className="bg-blue-50/80 border border-blue-200 p-3 rounded-2xl space-y-2">
                     <label className="block text-[10px] font-extrabold text-blue-900">💼 仕事・活動時間の設定</label>
                     <div className="flex items-center gap-1.5">
