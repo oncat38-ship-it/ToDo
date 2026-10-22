@@ -36,7 +36,6 @@
       color: #f1f5f9;
     }
 
-    /* 軽快でなめらかなアニメーション */
     @keyframes fadeIn {
       from { opacity: 0; transform: scale(0.96); }
       to { opacity: 1; transform: scale(1); }
@@ -147,7 +146,6 @@
       const [selectedDateFilter, setSelectedDateFilter] = useState('すべて');
       const [sortBy, setSortBy] = useState('created');
 
-      // モーダル関連
       const [isCalendarOpen, setIsCalendarOpen] = useState(false);
       const [isModalOpen, setIsModalOpen] = useState(false);
       const [isNewListModalOpen, setIsNewListModalOpen] = useState(false);
@@ -595,12 +593,18 @@
       const month = currentDate.getMonth();
       const firstDayOfMonth = new Date(year, month, 1).getDay();
       const lastDateOfMonth = new Date(year, month + 1, 0).getDate();
+      
       const calendarDays = [];
       for (let i = 0; i < firstDayOfMonth; i++) calendarDays.push(null);
       for (let i = 1; i <= lastDateOfMonth; i++) {
         const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
         calendarDays.push({ day: i, dateStr });
       }
+      // 常に均一なグリッド（6行×7列=42マス）になるようにパディング
+      while (calendarDays.length < 42) {
+        calendarDays.push(null);
+      }
+
       const calPaydayStr = getAdjustedPaydayDateStr(year, month + 1, payday, paydayAdjustment);
 
       const getThemeClasses = () => {
@@ -612,6 +616,8 @@
           accentText: 'text-rose-500 font-extrabold',
           floatingCal: 'bg-gradient-to-tr from-rose-400 to-pink-500 text-white shadow-xl shadow-pink-300/60 rounded-full hover-scale',
           floatingSet: 'bg-white hover:bg-pink-50 text-rose-600 border border-pink-200 shadow-md rounded-full hover-scale',
+          todayCell: 'bg-pink-50/90 border-2 border-rose-400',
+          essentialBadge: 'bg-rose-500 text-white',
           fontStyle: 'font-sans'
         };
         if (theme === 'business') return {
@@ -622,6 +628,8 @@
           accentText: 'text-blue-400 font-bold',
           floatingCal: 'bg-blue-600 hover:bg-blue-500 text-white shadow-2xl shadow-blue-900/60 rounded-xl hover-scale',
           floatingSet: 'bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 shadow-lg rounded-xl hover-scale',
+          todayCell: 'bg-blue-950/40 border-2 border-blue-500',
+          essentialBadge: 'bg-blue-600 text-white',
           fontStyle: 'font-mono'
         };
         return {
@@ -632,6 +640,8 @@
           accentText: 'text-slate-900 font-extrabold',
           floatingCal: 'bg-slate-900 hover:bg-slate-800 text-white shadow-xl shadow-slate-300 rounded-2xl hover-scale',
           floatingSet: 'bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 shadow-md rounded-2xl hover-scale',
+          todayCell: 'bg-slate-100 dark:bg-slate-800 border-2 border-slate-900 dark:border-slate-100',
+          essentialBadge: 'bg-slate-900 text-white',
           fontStyle: 'font-sans'
         };
       };
@@ -925,7 +935,7 @@
             <i data-lucide="settings" className="w-5 h-5"></i>
           </button>
 
-          {/* カレンダーモーダル（区切り線以外はなくして画面いっぱいでマスを最大化） */}
+          {/* カレンダーモーダル (均一マス・画面いっぱい・微小フォント・当日＆必須演出対応) */}
           {isCalendarOpen && (
             <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center z-50 p-0">
               <div className="bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 w-full h-full flex flex-col animate-modal">
@@ -946,27 +956,45 @@
                   <span className="text-rose-500">日</span><span>月</span><span>火</span><span>水</span><span>木</span><span>金</span><span className="text-blue-500">土</span>
                 </div>
 
-                {/* カレンダー本体：外枠なし、細いグリッド線のみで画面いっぱいに表示 */}
-                <div className="grid grid-cols-7 flex-1 divide-x divide-y divide-slate-200 dark:divide-slate-800 bg-slate-200 dark:bg-slate-800">
+                {/* カレンダー本体：常に6行で高さを均一化 (grid-template-rows) */}
+                <div 
+                  className="grid grid-cols-7 flex-1 divide-x divide-y divide-slate-200 dark:divide-slate-800 bg-slate-200 dark:bg-slate-800"
+                  style={{ gridTemplateRows: 'repeat(6, 1fr)' }}
+                >
                   {calendarDays.map((item, index) => {
-                    if (!item) return <div key={`empty-${index}`} className="bg-slate-50/50 dark:bg-slate-900/30"></div>;
+                    if (!item) return <div key={`empty-${index}`} className="bg-slate-50/40 dark:bg-slate-900/20"></div>;
+                    
                     const dayTodos = currentListTodos.filter(t => isTodoActiveOnDate(t, item.dateStr));
                     const dayMemoCount = memos.filter(m => m.date === item.dateStr).length;
                     const dayEvs = events.filter(e => e.date === item.dateStr);
                     const dayHols = holidays.filter(h => h.date === item.dateStr);
                     const isPay = calPaydayStr === item.dateStr;
+                    const isToday = item.dateStr === todayStr;
+                    const hasEssential = dayTodos.some(t => t.isEssential && !t.completed);
 
                     return (
-                      <div key={item.dateStr} onClick={() => setSelectedDayDetailDate(item.dateStr)} className="bg-white dark:bg-slate-950 p-1.5 flex flex-col justify-between hover:bg-indigo-500/5 transition cursor-pointer overflow-hidden">
+                      <div 
+                        key={item.dateStr} 
+                        onClick={() => setSelectedDayDetailDate(item.dateStr)} 
+                        className={`p-1 flex flex-col justify-between transition cursor-pointer overflow-hidden relative ${
+                          isToday ? themeStyles.todayCell : 'bg-white dark:bg-slate-950 hover:bg-indigo-500/5'
+                        } ${hasEssential ? (theme === 'animal' ? 'ring-2 ring-inset ring-rose-300' : theme === 'business' ? 'ring-2 ring-inset ring-blue-400' : 'ring-2 ring-inset ring-red-400') : ''}`}
+                      >
                         <div className="flex items-center justify-between shrink-0">
-                          <span className={`text-xs font-black px-1.5 py-0.5 rounded-lg ${isPay ? 'text-emerald-700 bg-emerald-100 dark:bg-emerald-900/60 dark:text-emerald-300' : 'text-slate-700 dark:text-slate-300'}`}>{item.day} {isPay && '💰'}</span>
-                          {dayMemoCount > 0 && <span className="text-[9px] bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-300 font-extrabold px-1 rounded">📌</span>}
+                          <span className={`text-[10px] font-black px-1 rounded ${isPay ? 'text-emerald-700 bg-emerald-100 dark:bg-emerald-900/60 dark:text-emerald-300' : isToday ? 'font-extrabold underline' : 'text-slate-700 dark:text-slate-300'}`}>
+                            {item.day} {isPay && '💰'} {isToday && (theme === 'animal' ? '✨' : '')}
+                          </span>
+                          <div className="flex items-center gap-0.5">
+                            {hasEssential && <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-ping"></span>}
+                            {dayMemoCount > 0 && <span className="text-[8px] bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-300 font-extrabold px-0.5 rounded">📌</span>}
+                          </div>
                         </div>
-                        <div className="space-y-1 overflow-hidden flex-1 mt-1">
-                          {dayHols.map(hol => <div key={hol.id} className="text-[10px] px-1 py-0.5 bg-amber-200 dark:bg-amber-900/70 text-amber-900 dark:text-amber-200 rounded font-bold truncate">🏖️ {hol.memberName}休</div>)}
-                          {dayEvs.map(ev => <div key={ev.id} className="text-[10px] px-1 py-0.5 bg-purple-100 dark:bg-purple-900/70 text-purple-800 dark:text-purple-200 rounded font-bold truncate">{ev.icon || '🎉'} {ev.title}</div>)}
+
+                        <div className="space-y-0.5 overflow-hidden flex-1 mt-0.5">
+                          {dayHols.map(hol => <div key={hol.id} className="text-[9px] px-1 bg-amber-200 dark:bg-amber-900/70 text-amber-900 dark:text-amber-200 rounded font-bold truncate">🏖️ {hol.memberName}</div>)}
+                          {dayEvs.map(ev => <div key={ev.id} className="text-[9px] px-1 bg-purple-100 dark:bg-purple-900/70 text-purple-800 dark:text-purple-200 rounded font-bold truncate">{ev.icon || '🎉'} {ev.title}</div>)}
                           {dayTodos.map(todo => (
-                            <div key={todo.id} className={`text-[10px] px-1 py-0.5 rounded truncate font-bold transition shadow-2xs ${todo.isEssential ? 'bg-red-600 text-white' : 'bg-slate-100 dark:bg-slate-900 text-slate-700 dark:text-slate-300'} ${todo.completed ? 'line-through opacity-40' : ''}`}>
+                            <div key={todo.id} className={`text-[9px] px-1 py-0.2 rounded truncate font-medium transition shadow-2xs ${todo.isEssential ? 'bg-red-600 text-white font-bold' : 'bg-slate-100 dark:bg-slate-900 text-slate-700 dark:text-slate-300'} ${todo.completed ? 'line-through opacity-40' : ''}`}>
                               {todo.title}
                             </div>
                           ))}
