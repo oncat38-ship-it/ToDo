@@ -20,9 +20,22 @@
 
   <style>
     body {
-      background-color: #f1f5f9;
-      color: #334155;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      transition: background-color 0.3s, color 0.3s;
+    }
+    
+    /* テーマ定義 */
+    body.theme-simple {
+      background-color: #f8fafc;
+      color: #334155;
+    }
+    body.theme-animal {
+      background-color: #fff5f7;
+      color: #4a3e3d;
+    }
+    body.theme-business {
+      background-color: #f1f5f9;
+      color: #1e293b;
     }
   </style>
 </head>
@@ -112,8 +125,11 @@
       const [password, setPassword] = useState('');
       const [authError, setAuthError] = useState('');
 
-      // メインタブ ('today' | 'todos' | 'memos' | 'event_add')
+      // メインタブ ('today' | 'todos' | 'memos')
       const [activeTab, setActiveTab] = useState('today');
+
+      // テーマ設定 ('simple' | 'animal' | 'business')
+      const [theme, setTheme] = useState('simple');
 
       const [lists, setLists] = useState([]);
       const [selectedListId, setSelectedListId] = useState('');
@@ -147,7 +163,11 @@
       const [selectedTodoIds, setSelectedTodoIds] = useState([]);
       const [newQuickMemo, setNewQuickMemo] = useState('');
 
+      // 編集用 State
       const [editingTodo, setEditingTodo] = useState(null);
+      const [editingEvent, setEditingEvent] = useState(null);
+      const [editingHoliday, setEditingHoliday] = useState(null);
+
       const [formTitle, setFormTitle] = useState('');
       const [formDetail, setFormDetail] = useState('');
       const [formHasDate, setFormHasDate] = useState(true);
@@ -182,6 +202,11 @@
         if (window.lucide) window.lucide.createIcons();
       });
 
+      // テーマ適用
+      useEffect(() => {
+        document.body.className = `theme-${theme}`;
+      }, [theme]);
+
       useEffect(() => {
         if (!isLoggedIn) return;
         fetch(`https://www.jma.go.jp/bosai/forecast/data/forecast/${locationCode}.json`)
@@ -215,6 +240,7 @@
           setMemos(data.memos || []);
           setTags(data.tags || []);
           setLocationCode(data.locationCode || '230000');
+          setTheme(data.theme || 'simple');
 
           setEvents(data.events || []);
           setPayday(data.payday || '25');
@@ -229,6 +255,7 @@
           setMemos([]);
           setTags([]);
           setLocationCode('230000');
+          setTheme('simple');
           setEvents([]);
           setPayday('25');
           setPaydayAdjustment('prev');
@@ -242,7 +269,7 @@
 
       const saveUserData = (
         updatedTodos, updatedLists, updatedTags, updatedLocation, updatedSelectedListId, updatedMemos, updatedTrash,
-        updatedEvents, updatedPayday, updatedHolidays, updatedMembers, updatedPaydayAdj
+        updatedEvents, updatedPayday, updatedHolidays, updatedMembers, updatedPaydayAdj, updatedTheme
       ) => {
         if (!userId) return;
         const dataToSave = {
@@ -253,6 +280,7 @@
           memos: updatedMemos !== undefined ? updatedMemos : memos,
           tags: updatedTags !== undefined ? updatedTags : tags,
           locationCode: updatedLocation !== undefined ? updatedLocation : locationCode,
+          theme: updatedTheme !== undefined ? updatedTheme : theme,
           events: updatedEvents !== undefined ? updatedEvents : events,
           payday: updatedPayday !== undefined ? updatedPayday : payday,
           paydayAdjustment: updatedPaydayAdj !== undefined ? updatedPaydayAdj : paydayAdjustment,
@@ -333,30 +361,52 @@
         closeModal();
       };
 
+      // イベント・休日の保存（編集機能対応）
       const handleSaveEventOrHoliday = (e) => {
         e.preventDefault();
         if (eventFormType === 'event') {
           if (!eventTitle.trim()) return;
-          const newEv = {
-            id: Date.now().toString(),
-            title: eventTitle.trim(),
-            date: eventDate,
-            icon: eventIcon || '🎉'
-          };
-          const nextEvents = [...events, newEv];
+          let nextEvents;
+          if (editingEvent) {
+            nextEvents = events.map(ev => ev.id === editingEvent.id ? {
+              ...ev,
+              title: eventTitle.trim(),
+              date: eventDate,
+              icon: eventIcon || '🎉'
+            } : ev);
+          } else {
+            const newEv = {
+              id: Date.now().toString(),
+              title: eventTitle.trim(),
+              date: eventDate,
+              icon: eventIcon || '🎉'
+            };
+            nextEvents = [...events, newEv];
+          }
           setEvents(nextEvents);
           saveUserData(undefined, undefined, undefined, undefined, undefined, undefined, undefined, nextEvents);
         } else {
-          const newHol = {
-            id: Date.now().toString(),
-            memberName: holidayMember,
-            date: eventDate
-          };
-          const nextHolidays = [...holidays, newHol];
+          let nextHolidays;
+          if (editingHoliday) {
+            nextHolidays = holidays.map(hol => hol.id === editingHoliday.id ? {
+              ...hol,
+              memberName: holidayMember,
+              date: eventDate
+            } : hol);
+          } else {
+            const newHol = {
+              id: Date.now().toString(),
+              memberName: holidayMember,
+              date: eventDate
+            };
+            nextHolidays = [...holidays, newHol];
+          }
           setHolidays(nextHolidays);
           saveUserData(undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, nextHolidays);
         }
         setIsEventModalOpen(false);
+        setEditingEvent(null);
+        setEditingHoliday(null);
         setEventTitle('');
       };
 
@@ -364,12 +414,39 @@
         const nextEvents = events.filter(e => e.id !== id);
         setEvents(nextEvents);
         saveUserData(undefined, undefined, undefined, undefined, undefined, undefined, undefined, nextEvents);
+        if (editingEvent && editingEvent.id === id) {
+          setIsEventModalOpen(false);
+          setEditingEvent(null);
+        }
       };
 
       const deleteHoliday = (id) => {
         const nextHolidays = holidays.filter(h => h.id !== id);
         setHolidays(nextHolidays);
         saveUserData(undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, nextHolidays);
+        if (editingHoliday && editingHoliday.id === id) {
+          setIsEventModalOpen(false);
+          setEditingHoliday(null);
+        }
+      };
+
+      const openEditEventModal = (ev) => {
+        setEditingEvent(ev);
+        setEditingHoliday(null);
+        setEventFormType('event');
+        setEventTitle(ev.title);
+        setEventIcon(ev.icon || '🎉');
+        setEventDate(ev.date);
+        setIsEventModalOpen(true);
+      };
+
+      const openEditHolidayModal = (hol) => {
+        setEditingHoliday(hol);
+        setEditingEvent(null);
+        setEventFormType('holiday');
+        setHolidayMember(hol.memberName);
+        setEventDate(hol.date);
+        setIsEventModalOpen(true);
       };
 
       const handleAddMember = () => {
@@ -416,7 +493,7 @@
       const permanentlyDeleteFromTrash = (id) => {
         const nextTrash = trash.filter(t => t.id !== id);
         setTrash(nextTrash);
-        saveUserData(undefined, undefined, undefined, undefined, undefined, undefined, nextTrash);
+        saveUserData(undefined, undefined, undefined, undefined, undefined, undefined, undefined, nextTrash);
       };
 
       const handleBulkDelete = () => {
@@ -506,7 +583,6 @@
         saveUserData(nextTodos);
       };
 
-      // カレンダーの日付クリック時
       const handleCalendarDateClick = (dateStr) => {
         setSelectedCalendarDate(dateStr);
         setIsDayActionModalOpen(true);
@@ -533,6 +609,9 @@
       };
 
       const openEventModalFromDate = (targetDateStr) => {
+        setEditingEvent(null);
+        setEditingHoliday(null);
+        setEventTitle('');
         setEventDate(targetDateStr);
         setIsEventModalOpen(true);
       };
@@ -593,6 +672,11 @@
         saveUserData(undefined, undefined, undefined, code);
       };
 
+      const handleSaveTheme = (th) => {
+        setTheme(th);
+        saveUserData(undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, th);
+      };
+
       const handleSavePayday = (pd, adj) => {
         setPayday(pd);
         setPaydayAdjustment(adj);
@@ -632,7 +716,7 @@
         } else if (sortBy === 'date') {
           if (!a.hasDate) return 1;
           if (!b.hasDate) return -1;
-          return a.startDate.localeCompare(b.startDate);
+          return a.startDate.localeCompare(a.startDate);
         } else {
           return b.id.localeCompare(a.id);
         }
@@ -661,6 +745,42 @@
       }
 
       const calPaydayStr = getAdjustedPaydayDateStr(year, month + 1, payday, paydayAdjustment);
+
+      // テーマ別スタイルクラスの定義
+      const getThemeClasses = () => {
+        if (theme === 'animal') {
+          return {
+            headerBg: 'bg-pink-100/90 border-pink-200',
+            brandIcon: 'bg-pink-500 text-white',
+            primaryBtn: 'bg-pink-500 hover:bg-pink-600 text-white',
+            activeTabBg: 'bg-pink-500 text-white',
+            cardBg: 'bg-white border-pink-200 shadow-sm',
+            accentText: 'text-pink-600',
+            badgeBg: 'bg-pink-100 text-pink-800'
+          };
+        } else if (theme === 'business') {
+          return {
+            headerBg: 'bg-slate-800 text-white border-slate-700',
+            brandIcon: 'bg-blue-600 text-white',
+            primaryBtn: 'bg-slate-800 hover:bg-slate-700 text-white',
+            activeTabBg: 'bg-slate-800 text-white',
+            cardBg: 'bg-white border-slate-300 shadow-sm',
+            accentText: 'text-slate-800',
+            badgeBg: 'bg-slate-200 text-slate-800'
+          };
+        }
+        return {
+          headerBg: 'bg-white/80 border-slate-200',
+          brandIcon: 'bg-gradient-to-tr from-indigo-600 to-violet-600 text-white',
+          primaryBtn: 'bg-indigo-600 hover:bg-indigo-700 text-white',
+          activeTabBg: 'bg-indigo-600 text-white',
+          cardBg: 'bg-white border-slate-200 shadow-xs',
+          accentText: 'text-indigo-600',
+          badgeBg: 'bg-indigo-100 text-indigo-800'
+        };
+      };
+
+      const themeStyles = getThemeClasses();
 
       if (!isLoggedIn) {
         return (
@@ -719,31 +839,33 @@
       }
 
       return (
-        <div className="min-h-screen bg-slate-100/70 text-xs flex flex-col font-sans">
-          {/* スマート化されたヘッダー */}
-          <header className="bg-white/80 backdrop-blur-md border-b border-slate-200/80 px-4 py-2 flex items-center justify-between sticky top-0 z-20 shadow-sm">
+        <div className="min-h-screen text-xs flex flex-col font-sans">
+          {/* ヘッダー */}
+          <header className={`backdrop-blur-md border-b px-4 py-2 flex items-center justify-between sticky top-0 z-20 shadow-xs ${themeStyles.headerBg}`}>
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-2">
-                <div className="bg-gradient-to-tr from-indigo-600 to-violet-600 text-white p-1.5 rounded-lg shadow-sm">
-                  <i data-lucide="check-square" className="w-4 h-4"></i>
+                <div className={`p-1.5 rounded-lg shadow-xs ${themeStyles.brandIcon}`}>
+                  <i data-lucide={theme === 'animal' ? 'cat' : theme === 'business' ? 'briefcase' : 'check-square'} className="w-4 h-4"></i>
                 </div>
-                <span className="font-extrabold text-slate-800 text-sm tracking-tight hidden sm:inline">TaskFlow</span>
+                <span className="font-extrabold text-sm tracking-tight hidden sm:inline">
+                  TaskFlow {theme === 'animal' && '🐾'}
+                </span>
               </div>
 
-              <div className="flex items-center gap-1.5 bg-slate-100/80 px-2.5 py-1 rounded-lg border border-slate-200">
-                <span className="text-[10px] text-slate-400 font-medium">リスト:</span>
+              <div className="flex items-center gap-1.5 bg-black/5 px-2.5 py-1 rounded-lg border border-black/10">
+                <span className="text-[10px] opacity-60 font-medium">リスト:</span>
                 <select
                   value={selectedListId}
                   onChange={(e) => setSelectedListId(e.target.value)}
-                  className="bg-transparent font-bold text-slate-700 outline-none text-xs cursor-pointer"
+                  className="bg-transparent font-bold outline-none text-xs cursor-pointer"
                 >
                   {lists.length === 0 ? (
                     <option value="">(リストなし)</option>
                   ) : (
-                    lists.map(l => <option key={l.id} value={l.id}>{l.name}</option>)
+                    lists.map(l => <option key={l.id} value={l.id} className="text-slate-800">{l.name}</option>)
                   )}
                 </select>
-                <button onClick={() => setIsNewListModalOpen(true)} className="text-indigo-600 hover:text-indigo-800 p-0.5 rounded transition" title="リスト作成">
+                <button onClick={() => setIsNewListModalOpen(true)} className="hover:opacity-80 p-0.5 rounded transition" title="リスト作成">
                   <i data-lucide="plus" className="w-3.5 h-3.5"></i>
                 </button>
               </div>
@@ -752,7 +874,7 @@
             <div className="flex items-center gap-1.5">
               <button
                 onClick={() => setIsCalendarOpen(true)}
-                className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded-lg border border-indigo-100 flex items-center gap-1 font-bold transition"
+                className="p-1.5 hover:bg-black/5 rounded-lg border border-black/10 flex items-center gap-1 font-bold transition"
                 title="カレンダーを開く"
               >
                 <i data-lucide="calendar" className="w-4 h-4"></i>
@@ -761,25 +883,25 @@
 
               <button
                 onClick={() => setIsSettingsOpen(true)}
-                className="p-1.5 text-slate-500 hover:bg-slate-100 rounded-lg border border-slate-200 transition"
+                className="p-1.5 hover:bg-black/5 rounded-lg border border-black/10 transition"
                 title="設定"
               >
                 <i data-lucide="settings" className="w-4 h-4"></i>
               </button>
 
-              <button onClick={handleLogout} className="text-slate-400 hover:text-rose-500 p-1.5 transition" title="ログアウト">
+              <button onClick={handleLogout} className="opacity-60 hover:opacity-100 p-1.5 transition" title="ログアウト">
                 <i data-lucide="log-out" className="w-4 h-4"></i>
               </button>
             </div>
           </header>
 
-          {/* タブ並び（予定追加をここへ統合） */}
+          {/* タブ並び */}
           <div className="bg-white border-b border-slate-200/60 px-4 py-1.5 flex items-center justify-between overflow-x-auto">
             <div className="flex gap-1">
               <button
                 onClick={() => setActiveTab('today')}
                 className={`px-2.5 py-1.5 rounded-lg font-bold text-[11px] whitespace-nowrap transition ${
-                  activeTab === 'today' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100'
+                  activeTab === 'today' ? themeStyles.activeTabBg : 'text-slate-500 hover:bg-slate-100'
                 }`}
               >
                 ☀️ 本日
@@ -787,7 +909,7 @@
               <button
                 onClick={() => setActiveTab('todos')}
                 className={`px-2.5 py-1.5 rounded-lg font-bold text-[11px] whitespace-nowrap transition ${
-                  activeTab === 'todos' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100'
+                  activeTab === 'todos' ? themeStyles.activeTabBg : 'text-slate-500 hover:bg-slate-100'
                 }`}
               >
                 📝 ToDo
@@ -795,13 +917,18 @@
               <button
                 onClick={() => setActiveTab('memos')}
                 className={`px-2.5 py-1.5 rounded-lg font-bold text-[11px] whitespace-nowrap transition ${
-                  activeTab === 'memos' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100'
+                  activeTab === 'memos' ? themeStyles.activeTabBg : 'text-slate-500 hover:bg-slate-100'
                 }`}
               >
                 📌 メモ
               </button>
               <button
-                onClick={() => setIsEventModalOpen(true)}
+                onClick={() => {
+                  setEditingEvent(null);
+                  setEditingHoliday(null);
+                  setEventTitle('');
+                  setIsEventModalOpen(true);
+                }}
                 className="px-2.5 py-1.5 rounded-lg font-bold text-[11px] whitespace-nowrap text-purple-700 bg-purple-50 hover:bg-purple-100 transition border border-purple-200/60 flex items-center gap-1"
               >
                 🎉 予定追加
@@ -810,24 +937,25 @@
 
             <button
               onClick={openModalForCreate}
-              className="bg-slate-900 hover:bg-slate-800 text-white px-3 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 shadow-sm transition ml-2 whitespace-nowrap"
+              className={`px-3 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 shadow-sm transition ml-2 whitespace-nowrap ${themeStyles.primaryBtn}`}
             >
               <i data-lucide="plus" className="w-3.5 h-3.5"></i>
               <span>新規ToDo</span>
             </button>
           </div>
 
+          {/* メインコンテンツ */}
           <main className="flex-1 max-w-2xl w-full mx-auto p-3.5 space-y-3.5">
             {activeTab === 'today' && (
               <div className="space-y-3.5">
-                <div className="bg-white rounded-2xl border border-slate-200/80 p-3.5 shadow-sm space-y-3">
+                <div className={`rounded-2xl p-3.5 ${themeStyles.cardBg} space-y-3`}>
                   <div className="flex items-center justify-between">
                     <div>
-                      <span className="text-[10px] font-extrabold text-indigo-600 tracking-wider uppercase">TODAY'S SCHEDULE</span>
+                      <span className={`text-[10px] font-extrabold tracking-wider uppercase ${themeStyles.accentText}`}>TODAY'S SCHEDULE</span>
                       <div className="text-base font-black text-slate-800 mt-0.5">{formattedToday}</div>
                     </div>
 
-                    <div className="flex items-center gap-2.5 bg-gradient-to-r from-slate-50 to-indigo-50/30 px-3 py-1.5 rounded-xl border border-slate-100">
+                    <div className="flex items-center gap-2.5 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-100">
                       <span className="text-xl">{weather.icon}</span>
                       <div className="text-right">
                         <div className="text-[11px] font-extrabold text-slate-700">{weather.text}</div>
@@ -846,15 +974,13 @@
                         </span>
                       )}
                       {todayEvents.map(ev => (
-                        <span key={ev.id} className="bg-purple-100 text-purple-800 font-bold text-[10px] px-2 py-0.5 rounded-lg flex items-center gap-1">
+                        <span key={ev.id} onClick={() => openEditEventModal(ev)} className="bg-purple-100 text-purple-800 font-bold text-[10px] px-2 py-0.5 rounded-lg flex items-center gap-1 cursor-pointer hover:bg-purple-200 transition">
                           {ev.icon || '🎉'} {ev.title}
-                          <button onClick={() => deleteEvent(ev.id)} className="hover:text-rose-600 ml-1">×</button>
                         </span>
                       ))}
                       {todayHolidays.map(hol => (
-                        <span key={hol.id} className="bg-amber-100 text-amber-800 font-bold text-[10px] px-2 py-0.5 rounded-lg flex items-center gap-1">
+                        <span key={hol.id} onClick={() => openEditHolidayModal(hol)} className="bg-amber-100 text-amber-800 font-bold text-[10px] px-2 py-0.5 rounded-lg flex items-center gap-1 cursor-pointer hover:bg-amber-200 transition">
                           🏖️ {hol.memberName} のお休み
-                          <button onClick={() => deleteHoliday(hol.id)} className="hover:text-rose-600 ml-1">×</button>
                         </span>
                       ))}
                     </div>
@@ -887,7 +1013,7 @@
                   <span className="font-extrabold text-slate-700 text-xs">本日のタスク ({todayTodos.length}件)</span>
 
                   {todayTodos.length === 0 ? (
-                    <div className="bg-white p-6 rounded-2xl border border-slate-200/80 text-center text-slate-400 text-xs">
+                    <div className={`p-6 rounded-2xl text-center text-slate-400 text-xs ${themeStyles.cardBg}`}>
                       本日の予定はありません。
                     </div>
                   ) : (
@@ -896,8 +1022,8 @@
                         key={todo.id}
                         className={`p-3 rounded-2xl transition border ${
                           todo.isEssential
-                            ? 'bg-gradient-to-r from-red-500/10 via-rose-50 to-white border-red-500 border-2 shadow-md shadow-red-100'
-                            : 'bg-white border-slate-200 shadow-xs'
+                            ? 'bg-gradient-to-r from-red-500/10 via-rose-50 to-white border-red-500 border-2 shadow-md'
+                            : `${themeStyles.cardBg}`
                         } ${todo.completed ? 'opacity-40 bg-slate-100' : ''}`}
                       >
                         <div className="flex items-start justify-between gap-2.5">
@@ -1004,7 +1130,7 @@
 
             {activeTab === 'todos' && (
               <div className="space-y-3">
-                <div className="bg-white p-3 rounded-2xl border border-slate-200/80 shadow-xs space-y-2">
+                <div className={`p-3 rounded-2xl space-y-2 ${themeStyles.cardBg}`}>
                   <div className="relative">
                     <input
                       type="text"
@@ -1078,7 +1204,7 @@
 
                 <div className="space-y-2">
                   {filteredTodos.length === 0 ? (
-                    <div className="bg-white p-8 rounded-2xl border border-slate-200/80 text-center text-slate-400 text-xs">
+                    <div className={`p-8 rounded-2xl text-center text-slate-400 text-xs ${themeStyles.cardBg}`}>
                       条件に一致するToDoは見つかりませんでした。
                     </div>
                   ) : (
@@ -1089,8 +1215,8 @@
                           key={todo.id}
                           className={`p-3 rounded-2xl transition border ${
                             todo.isEssential
-                              ? 'bg-gradient-to-r from-red-500/10 via-rose-50 to-white border-red-500 border-2 shadow-md shadow-red-100'
-                              : 'bg-white border-slate-200 shadow-xs'
+                              ? 'bg-gradient-to-r from-red-500/10 via-rose-50 to-white border-red-500 border-2 shadow-md'
+                              : `${themeStyles.cardBg}`
                           } ${todo.completed ? 'opacity-40 bg-slate-100' : ''} ${isSelected ? 'ring-2 ring-indigo-500' : ''}`}
                         >
                           <div className="flex items-start justify-between gap-2.5">
@@ -1151,7 +1277,7 @@
 
             {activeTab === 'memos' && (
               <div className="space-y-3.5">
-                <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs space-y-3">
+                <div className={`p-4 rounded-2xl space-y-3 ${themeStyles.cardBg}`}>
                   <span className="font-extrabold text-slate-800 text-xs flex items-center gap-1.5">
                     <i data-lucide="sticky-note" className="w-4 h-4 text-indigo-600"></i>
                     自由な覚え書きメモ帳
@@ -1168,7 +1294,7 @@
                     />
                     <button
                       onClick={() => handleAddMemo()}
-                      className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-xs font-bold transition shadow-xs"
+                      className={`px-4 py-2 rounded-xl text-xs font-bold transition shadow-xs ${themeStyles.primaryBtn}`}
                     >
                       追加
                     </button>
@@ -1177,12 +1303,12 @@
 
                 <div className="space-y-2">
                   {memos.length === 0 ? (
-                    <div className="bg-white p-8 rounded-2xl border border-slate-200/80 text-center text-slate-400 text-xs">
+                    <div className={`p-8 rounded-2xl text-center text-slate-400 text-xs ${themeStyles.cardBg}`}>
                       メモはありません。
                     </div>
                   ) : (
                     memos.map(memo => (
-                      <div key={memo.id} className="bg-white p-3 rounded-2xl border border-slate-200/80 flex items-center justify-between shadow-2xs">
+                      <div key={memo.id} className={`p-3 rounded-2xl flex items-center justify-between shadow-2xs ${themeStyles.cardBg}`}>
                         <div className="flex items-center gap-2.5 flex-1 min-w-0">
                           <input
                             type="checkbox"
@@ -1261,18 +1387,35 @@
                         </div>
 
                         <div className="space-y-0.5 overflow-y-auto">
+                          {/* 休日アイテム (クリックで編集) */}
                           {dayHols.map(hol => (
-                            <div key={hol.id} className="text-[8px] px-1 bg-amber-200 text-amber-900 rounded font-bold truncate">
+                            <div
+                              key={hol.id}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openEditHolidayModal(hol);
+                              }}
+                              className="text-[8px] px-1 bg-amber-200 text-amber-900 rounded font-bold truncate hover:opacity-80 cursor-pointer"
+                            >
                               🏖️ {hol.memberName}休
                             </div>
                           ))}
 
+                          {/* 特別イベントアイテム (クリックで編集) */}
                           {dayEvs.map(ev => (
-                            <div key={ev.id} className="text-[8px] px-1 bg-purple-100 text-purple-800 rounded font-bold truncate">
+                            <div
+                              key={ev.id}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openEditEventModal(ev);
+                              }}
+                              className="text-[8px] px-1 bg-purple-100 text-purple-800 rounded font-bold truncate hover:opacity-80 cursor-pointer"
+                            >
                               {ev.icon || '🎉'} {ev.title}
                             </div>
                           ))}
 
+                          {/* ToDoタスク (クリックで編集) */}
                           {dayTodos.map(todo => (
                             <div
                               key={todo.id}
@@ -1334,33 +1477,51 @@
             </div>
           )}
 
-          {/* イベント / 休日登録モーダル */}
+          {/* イベント / 休日登録・編集モーダル */}
           {isEventModalOpen && (
             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 z-50">
               <div className="bg-white rounded-2xl w-full max-w-sm p-4 shadow-2xl border border-slate-100 space-y-3">
                 <div className="flex items-center justify-between border-b pb-2">
-                  <h2 className="text-xs font-bold text-slate-800">🎉 予定・休日設定</h2>
-                  <button onClick={() => setIsEventModalOpen(false)} className="text-slate-400 p-0.5">
-                    <i data-lucide="x" className="w-4 h-4"></i>
-                  </button>
+                  <h2 className="text-xs font-bold text-slate-800">
+                    {editingEvent || editingHoliday ? '🎉 予定・休日の編集' : '🎉 予定・休日設定'}
+                  </h2>
+                  <div className="flex items-center gap-1">
+                    {(editingEvent || editingHoliday) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (editingEvent) deleteEvent(editingEvent.id);
+                          if (editingHoliday) deleteHoliday(editingHoliday.id);
+                        }}
+                        className="text-rose-600 hover:bg-rose-50 px-2 py-1 rounded-lg text-[10px] font-bold"
+                      >
+                        削除
+                      </button>
+                    )}
+                    <button onClick={() => { setIsEventModalOpen(false); setEditingEvent(null); setEditingHoliday(null); }} className="text-slate-400 p-0.5">
+                      <i data-lucide="x" className="w-4 h-4"></i>
+                    </button>
+                  </div>
                 </div>
 
-                <div className="flex bg-slate-100 p-1 rounded-xl font-bold">
-                  <button
-                    type="button"
-                    onClick={() => setEventFormType('event')}
-                    className={`flex-1 py-1 rounded-lg transition ${eventFormType === 'event' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-500'}`}
-                  >
-                    特別イベント (予定)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setEventFormType('holiday')}
-                    className={`flex-1 py-1 rounded-lg transition ${eventFormType === 'holiday' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-500'}`}
-                  >
-                    休日設定 (メンバー別)
-                  </button>
-                </div>
+                {!editingEvent && !editingHoliday && (
+                  <div className="flex bg-slate-100 p-1 rounded-xl font-bold">
+                    <button
+                      type="button"
+                      onClick={() => setEventFormType('event')}
+                      className={`flex-1 py-1 rounded-lg transition ${eventFormType === 'event' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-500'}`}
+                    >
+                      特別イベント (予定)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEventFormType('holiday')}
+                      className={`flex-1 py-1 rounded-lg transition ${eventFormType === 'holiday' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-500'}`}
+                    >
+                      休日設定 (メンバー別)
+                    </button>
+                  </div>
+                )}
 
                 <form onSubmit={handleSaveEventOrHoliday} className="space-y-2.5 pt-1">
                   <div>
@@ -1387,7 +1548,7 @@
                             className="w-12 text-center py-1 border border-slate-200 rounded-lg text-lg font-bold"
                           />
                           <div className="flex gap-1 overflow-x-auto">
-                            {['🎉', '🎂', '🎤', '✈️', '🚗', '💍', '🏀'].map(emoji => (
+                            {['🎉', '🎂', '🎤', '✈️', '🚗', '💍', '🏀', '🐾', '🐶', '🐱'].map(emoji => (
                               <button
                                 type="button"
                                 key={emoji}
@@ -1448,8 +1609,8 @@
                   )}
 
                   <div className="flex justify-end gap-1.5 pt-2 border-t">
-                    <button type="button" onClick={() => setIsEventModalOpen(false)} className="px-3 py-1.5 border rounded-lg text-xs font-bold">キャンセル</button>
-                    <button type="submit" className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold">登録する</button>
+                    <button type="button" onClick={() => { setIsEventModalOpen(false); setEditingEvent(null); setEditingHoliday(null); }} className="px-3 py-1.5 border rounded-lg text-xs font-bold">キャンセル</button>
+                    <button type="submit" className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold">保存する</button>
                   </div>
                 </form>
               </div>
@@ -1614,17 +1775,50 @@
             </div>
           )}
 
+          {/* 設定モーダル */}
           {isSettingsOpen && (
             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 z-50">
               <div className="bg-white rounded-2xl w-full max-w-xs p-4 shadow-2xl border border-slate-100 space-y-4">
                 <div className="flex items-center justify-between border-b pb-2">
-                  <h2 className="text-xs font-bold text-slate-800">設定・各種機能</h2>
+                  <h2 className="text-xs font-bold text-slate-800">設定・テーマ変更</h2>
                   <button onClick={() => setIsSettingsOpen(false)} className="text-slate-400 p-0.5">
                     <i data-lucide="x" className="w-4 h-4"></i>
                   </button>
                 </div>
 
+                {/* デザインテーマの選択 */}
                 <div className="space-y-1.5">
+                  <label className="block text-[10px] font-bold text-slate-500">🎨 デザインテーマ</label>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    <button
+                      onClick={() => handleSaveTheme('simple')}
+                      className={`p-2 rounded-xl text-[10px] font-bold border transition text-center ${
+                        theme === 'simple' ? 'bg-slate-800 text-white border-slate-800' : 'bg-slate-50 text-slate-700 border-slate-200'
+                      }`}
+                    >
+                      ⚪ シンプル
+                    </button>
+                    <button
+                      onClick={() => handleSaveTheme('animal')}
+                      className={`p-2 rounded-xl text-[10px] font-bold border transition text-center ${
+                        theme === 'animal' ? 'bg-pink-500 text-white border-pink-500' : 'bg-pink-50 text-pink-700 border-pink-200'
+                      }`}
+                    >
+                      🐾 アニマル
+                    </button>
+                    <button
+                      onClick={() => handleSaveTheme('business')}
+                      className={`p-2 rounded-xl text-[10px] font-bold border transition text-center ${
+                        theme === 'business' ? 'bg-slate-900 text-white border-slate-900' : 'bg-slate-100 text-slate-800 border-slate-300'
+                      }`}
+                    >
+                      💼 ビジネス
+                    </button>
+                  </div>
+                </div>
+
+                {/* 天気予報の地域選択 */}
+                <div className="space-y-1.5 pt-2 border-t border-slate-100">
                   <label className="block text-[10px] font-bold text-slate-500">天気予報の地域設定</label>
                   <select
                     value={locationCode}
@@ -1637,6 +1831,7 @@
                   </select>
                 </div>
 
+                {/* 給料日設定 */}
                 <div className="space-y-2 pt-2 border-t border-slate-100">
                   <label className="block text-[10px] font-bold text-slate-500">毎月の給料日 & 休日の補正設定</label>
                   <div className="flex items-center gap-1">
@@ -1666,6 +1861,7 @@
                   </div>
                 </div>
 
+                {/* ゴミ箱管理ボタン */}
                 <div className="pt-2 border-t border-slate-100 space-y-1">
                   <label className="block text-[10px] font-bold text-slate-500">ゴミ箱（24時間保管）</label>
                   <button
@@ -1684,6 +1880,7 @@
             </div>
           )}
 
+          {/* ゴミ箱モーダル */}
           {isTrashOpen && (
             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 z-50">
               <div className="bg-white rounded-2xl w-full max-w-sm p-4 shadow-2xl border border-slate-100 space-y-3">
@@ -1736,6 +1933,7 @@
             </div>
           )}
 
+          {/* 新規リスト作成モーダル */}
           {isNewListModalOpen && (
             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 z-50">
               <div className="bg-white rounded-2xl w-full max-w-xs p-4 shadow-2xl border border-slate-100">
