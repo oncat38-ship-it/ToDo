@@ -224,6 +224,7 @@
       const [eventIcon, setEventIcon] = useState('🎉');
       const [eventDate, setEventDate] = useState(new Date().toISOString().split('T')[0]);
       const [holidayMember, setHolidayMember] = useState('自分');
+      const [newMemberInput, setNewMemberInput] = useState('');
 
       const [currentDate, setCurrentDate] = useState(new Date());
       const [weather, setWeather] = useState({ text: '読み込み中...', icon: '🌤️' });
@@ -498,6 +499,16 @@
         setEditingEvent(null); setEditingHoliday(null); setEventTitle('');
       };
 
+      const handleAddMemberName = () => {
+        if (newMemberInput.trim() && !memberNames.includes(newMemberInput.trim())) {
+          const nextMembers = [...memberNames, newMemberInput.trim()];
+          setMemberNames(nextMembers);
+          setHolidayMember(newMemberInput.trim());
+          saveUserDataToFirebase({ memberNames: nextMembers });
+          setNewMemberInput('');
+        }
+      };
+
       const deleteEvent = (id) => {
         const nextEvents = events.filter(e => e.id !== id);
         setEvents(nextEvents);
@@ -620,6 +631,15 @@
       };
 
       const closeModal = () => { setIsModalOpen(false); setEditingTodo(null); };
+
+      const handleAddTag = () => {
+        if (newTagInput.trim() && !tags.includes(newTagInput.trim())) {
+          const nextTags = [...tags, newTagInput.trim()];
+          setTags(nextTags);
+          saveUserDataToFirebase({ tags: nextTags });
+          setNewTagInput('');
+        }
+      };
 
       const handleCreateList = (e) => {
         e.preventDefault();
@@ -1129,7 +1149,7 @@
             );
           })()}
 
-          {/* Todo作成・編集モーダル */}
+          {/* Todo作成・編集モーダル (フル仕様復元版) */}
           {isModalOpen && (
             <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-3 z-50">
               <div className="bg-white rounded-3xl w-full max-w-sm p-5 shadow-2xl border max-h-[90vh] overflow-y-auto space-y-3.5 animate-modal">
@@ -1142,6 +1162,105 @@
                   <input type="text" value={formTitle} onChange={(e) => setFormTitle(e.target.value)} className="w-full px-3.5 py-2.5 bg-black/5 border rounded-2xl text-sm font-bold" placeholder="タイトル" required />
                   <textarea value={formDetail} onChange={(e) => setFormDetail(e.target.value)} className="w-full px-3.5 py-2.5 bg-black/5 border rounded-2xl text-sm h-20" placeholder="詳細メモ..." />
 
+                  {/* 日付設定セクション */}
+                  <div className="bg-black/5 p-3 rounded-2xl border space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold opacity-80">日付・期間を設定</label>
+                      <input type="checkbox" checked={formHasDate} onChange={(e) => setFormHasDate(e.target.checked)} className="w-4 h-4 text-indigo-600 rounded" />
+                    </div>
+
+                    {formHasDate && (
+                      <div className="space-y-2.5 pt-1">
+                        <div className="flex bg-black/10 p-0.5 rounded-xl text-[11px] font-bold">
+                          <button type="button" onClick={() => setFormDateMode('range')} className={`flex-1 py-1 rounded-lg ${formDateMode === 'range' ? 'bg-white' : 'opacity-60'}`}>期間</button>
+                          <button type="button" onClick={() => setFormDateMode('specific')} className={`flex-1 py-1 rounded-lg ${formDateMode === 'specific' ? 'bg-white' : 'opacity-60'}`}>複数日</button>
+                        </div>
+                        
+                        <div onClick={() => setIsPickerOpen(!isPickerOpen)} className="flex items-center justify-between bg-white px-3.5 py-2.5 border rounded-2xl cursor-pointer">
+                          <span className="text-xs font-bold truncate">
+                            {formDateMode === 'range' 
+                              ? (formStartDate ? `${formStartDate} 〜 ${formEndDate || formStartDate}` : '📅 期間を選択')
+                              : (formSpecificDates.length > 0 ? `📅 ${formSpecificDates.length}日選択中` : '📅 複数日を選択')}
+                          </span>
+                          <i data-lucide="chevron-down" className="w-4 h-4 opacity-50"></i>
+                        </div>
+
+                        {/* カレンダーピッカー */}
+                        {isPickerOpen && (
+                          <div className="bg-white border p-3 rounded-2xl space-y-2">
+                            <div className="flex justify-between text-xs font-bold">
+                              <span>{pickerYear}年 {pickerMonth + 1}月</span>
+                              <div className="flex gap-1">
+                                <button type="button" onClick={() => setPickerMonth(pickerMonth === 0 ? 11 : pickerMonth - 1)}>◀</button>
+                                <button type="button" onClick={() => setPickerMonth(pickerMonth === 11 ? 0 : pickerMonth + 1)}>▶</button>
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-7 gap-1 text-center font-bold text-[10px] opacity-50">
+                              <span className="text-rose-500">日</span><span>月</span><span>火</span><span>水</span><span>木</span><span>金</span><span className="text-blue-500">土</span>
+                            </div>
+                            <div className="grid grid-cols-7 gap-1">
+                              {(() => {
+                                const fDay = new Date(pickerYear, pickerMonth, 1).getDay();
+                                const lDate = new Date(pickerYear, pickerMonth + 1, 0).getDate();
+                                const days = [];
+                                for(let i=0; i<fDay; i++) days.push(<div key={`e-${i}`}></div>);
+                                for(let i=1; i<=lDate; i++) {
+                                  const dStr = `${pickerYear}-${String(pickerMonth+1).padStart(2,'0')}-${String(i).padStart(2,'0')}`;
+                                  const isSelected = formDateMode === 'range' 
+                                    ? (dStr >= formStartDate && dStr <= (formEndDate || formStartDate))
+                                    : formSpecificDates.includes(dStr);
+                                  days.push(
+                                    <button key={dStr} type="button" onClick={() => handlePickerDateClick(dStr)} className={`h-8 rounded-xl text-xs font-bold ${isSelected ? 'bg-indigo-600 text-white' : 'bg-black/5'}`}>{i}</button>
+                                  );
+                                }
+                                return days;
+                              })()}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 時間設定 */}
+                  <div className="bg-black/5 p-3 rounded-2xl border flex items-center justify-between">
+                    <label className="text-xs font-bold opacity-80 flex items-center gap-2 cursor-pointer">
+                      <input type="checkbox" checked={formHasTime} onChange={(e) => setFormHasTime(e.target.checked)} className="w-4 h-4 text-indigo-600 rounded" />
+                      <span>時刻を指定</span>
+                    </label>
+                    {formHasTime && (
+                      <input type="time" value={formTime} onChange={(e) => setFormTime(e.target.value)} className="bg-white border rounded-xl px-2 py-1 text-xs font-bold" />
+                    )}
+                  </div>
+
+                  {/* フラグ設定 */}
+                  <div className="flex items-center justify-between px-1">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input type="checkbox" checked={formIsEssential} onChange={(e) => setFormIsEssential(e.target.checked)} className="w-4 h-4 text-red-600 rounded" />
+                      <span className="text-xs font-bold text-red-600">⚠️ 必須</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input type="checkbox" checked={formIsLocked} onChange={(e) => setFormIsLocked(e.target.checked)} className="w-4 h-4 text-slate-700 rounded" />
+                      <span className="text-xs font-bold">🔒 ロック</span>
+                    </label>
+                  </div>
+
+                  {/* タグ設定 */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold opacity-80">タグ選択</label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {tags.map(t => (
+                        <button key={t} type="button" onClick={() => {
+                          setFormTags(formTags.includes(t) ? formTags.filter(x => x !== t) : [...formTags, t]);
+                        }} className={`px-2.5 py-1 rounded-xl text-[11px] font-bold border transition ${formTags.includes(t) ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-black/5 text-slate-700 border-black/5'}`}>{t}</button>
+                      ))}
+                    </div>
+                    <div className="flex gap-1.5 pt-1">
+                      <input type="text" value={newTagInput} onChange={(e) => setNewTagInput(e.target.value)} placeholder="新しいタグ名..." className="flex-1 px-3 py-1.5 border rounded-xl text-xs" />
+                      <button type="button" onClick={handleAddTag} className="bg-black/10 px-3 py-1.5 rounded-xl text-xs font-bold">追加</button>
+                    </div>
+                  </div>
+
                   <div className="flex justify-end gap-2 pt-3 border-t">
                     <button type="button" onClick={closeModal} className="px-4 py-2 border rounded-xl text-xs font-bold">キャンセル</button>
                     <button type="submit" className={`px-4 py-2 rounded-xl text-xs font-bold ${themeStyles.primaryBtn}`}>保存</button>
@@ -1151,15 +1270,46 @@
             </div>
           )}
 
-          {/* イベントモーダル */}
+          {/* 予定・休日追加モーダル (フル仕様復元版) */}
           {isEventModalOpen && (
             <div className="fixed inset-0 bg-slate-950/70 flex items-center justify-center p-3 z-50">
               <div className="bg-white rounded-3xl w-full max-w-sm p-5 shadow-2xl border space-y-3.5">
-                <h2 className="text-xs font-bold">🎉 予定・休日追加</h2>
+                <div className="flex bg-black/10 p-0.5 rounded-xl text-xs font-bold">
+                  <button type="button" onClick={() => setEventFormType('event')} className={`flex-1 py-1.5 rounded-lg ${eventFormType === 'event' ? 'bg-white shadow-xs' : 'opacity-60'}`}>🎉 イベント予定</button>
+                  <button type="button" onClick={() => setEventFormType('holiday')} className={`flex-1 py-1.5 rounded-lg ${eventFormType === 'holiday' ? 'bg-white shadow-xs' : 'opacity-60'}`}>🏖️ 休日設定</button>
+                </div>
+
                 <form onSubmit={handleSaveEventOrHoliday} className="space-y-3">
-                  <input type="date" value={eventDate} onChange={(e) => setEventDate(e.target.value)} className="w-full px-3.5 py-2.5 border rounded-2xl font-bold text-sm" required />
-                  <input type="text" value={eventTitle} onChange={(e) => setEventTitle(e.target.value)} className="w-full px-3.5 py-2.5 border rounded-2xl font-bold text-sm" placeholder="イベント名" required />
-                  <div className="flex justify-end gap-2 pt-2">
+                  <div>
+                    <label className="block text-[10px] opacity-60 font-bold mb-1">日付</label>
+                    <input type="date" value={eventDate} onChange={(e) => setEventDate(e.target.value)} className="w-full px-3.5 py-2.5 border rounded-2xl font-bold text-sm" required />
+                  </div>
+
+                  {eventFormType === 'event' ? (
+                    <>
+                      <div>
+                        <label className="block text-[10px] opacity-60 font-bold mb-1">イベント名</label>
+                        <input type="text" value={eventTitle} onChange={(e) => setEventTitle(e.target.value)} className="w-full px-3.5 py-2.5 border rounded-2xl font-bold text-sm" placeholder="例: 誕生日会, 旅行..." required />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] opacity-60 font-bold mb-1">アイコン</label>
+                        <input type="text" value={eventIcon} onChange={(e) => setEventIcon(e.target.value)} className="w-full px-3.5 py-2 border rounded-2xl font-bold text-sm" placeholder="例: 🎉, ✈️, 🚗" />
+                      </div>
+                    </>
+                  ) : (
+                    <div className="space-y-2">
+                      <label className="block text-[10px] opacity-60 font-bold">対象メンバー</label>
+                      <select value={holidayMember} onChange={(e) => setHolidayMember(e.target.value)} className="w-full px-3.5 py-2.5 border rounded-2xl font-bold text-xs">
+                        {memberNames.map(m => <option key={m} value={m}>{m}</option>)}
+                      </select>
+                      <div className="flex gap-1.5 pt-1">
+                        <input type="text" value={newMemberInput} onChange={(e) => setNewMemberInput(e.target.value)} placeholder="メンバー名を追加..." className="flex-1 px-3 py-1.5 border rounded-xl text-xs" />
+                        <button type="button" onClick={handleAddMemberName} className="bg-black/10 px-3 py-1.5 rounded-xl text-xs font-bold">追加</button>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex justify-end gap-2 pt-2 border-t">
                     <button type="button" onClick={() => setIsEventModalOpen(false)} className="px-4 py-2 border rounded-xl text-xs font-bold">キャンセル</button>
                     <button type="submit" className={`px-4 py-2 rounded-xl text-xs font-bold ${themeStyles.primaryBtn}`}>保存</button>
                   </div>
