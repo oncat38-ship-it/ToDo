@@ -509,13 +509,27 @@
       const handleSaveTheme = (th) => { setTheme(th); saveUserData(undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, th); };
       const handleSavePayday = (pd, adj) => { setPayday(pd); setPaydayAdjustment(adj); saveUserData(undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, pd, undefined, undefined, adj); };
 
+      // 日付タップ時のトグル選択（押されてないとこを押せば選択、押されてるとこを押せば選択解除）
       const handlePickerDateClick = (dateStr) => {
         if (formDateMode === 'range') {
-          if (!formStartDate || (formStartDate && formEndDate)) {
-            setFormStartDate(dateStr); setFormEndDate('');
+          if (formStartDate === dateStr && formEndDate === dateStr) {
+            setFormStartDate(''); setFormEndDate('');
+          } else if (formStartDate === dateStr && !formEndDate) {
+            setFormStartDate('');
+          } else if (formEndDate === dateStr) {
+            setFormEndDate('');
+          } else if (!formStartDate) {
+            setFormStartDate(dateStr);
+          } else if (!formEndDate) {
+            if (dateStr < formStartDate) {
+              setFormEndDate(formStartDate);
+              setFormStartDate(dateStr);
+            } else {
+              setFormEndDate(dateStr);
+            }
           } else {
-            if (dateStr < formStartDate) { setFormStartDate(dateStr); setFormEndDate(''); }
-            else { setFormEndDate(dateStr); }
+            setFormStartDate(dateStr);
+            setFormEndDate('');
           }
         } else {
           if (formSpecificDates.includes(dateStr)) {
@@ -896,25 +910,30 @@
             <i data-lucide="settings" className="w-5 h-5"></i>
           </button>
 
-          {/* カレンダーモーダル (横幅いっぱい・隙間なし・省略表示対応) */}
+          {/* カレンダーモーダル (全画面・隙間なし) */}
           {isCalendarOpen && (
-            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 z-50">
-              <div className="bg-white text-slate-800 rounded-2xl w-full max-w-4xl p-3 sm:p-5 shadow-2xl border border-slate-100 flex flex-col h-[92vh]">
-                <div className="flex items-center justify-between mb-2.5 border-b pb-2 shrink-0">
-                  <div className="flex items-center gap-1.5"><i data-lucide="calendar" className="w-4 h-4 text-indigo-600"></i><span className="font-extrabold text-sm">{year}年 {month + 1}月</span></div>
+            <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-xs flex items-center justify-center z-50 p-0 sm:p-2">
+              <div className="bg-white text-slate-800 w-full h-full sm:h-[96vh] sm:rounded-2xl p-2 sm:p-4 shadow-2xl flex flex-col">
+                <div className="flex items-center justify-between mb-1.5 border-b pb-1.5 shrink-0 px-1">
+                  <div className="flex items-center gap-1.5">
+                    <i data-lucide="calendar" className="w-4 h-4 text-indigo-600"></i>
+                    <span className="font-black text-sm">{year}年 {month + 1}月</span>
+                  </div>
                   <div className="flex items-center gap-1">
                     <button onClick={() => setCurrentDate(new Date(year, month - 1, 1))} className="px-2.5 py-1 border rounded-lg text-[11px] font-bold hover:bg-slate-50">前月</button>
-                    <button onClick={() => setCurrentDate(new Date())} className="px-2.5 py-1 border rounded-lg text-[11px] font-bold hover:bg-slate-50">今月</button>
+                    <button onClick={() => setCurrentDate(new Date())} className="px-2 py-1 border rounded-lg text-[11px] font-bold hover:bg-slate-50">今月</button>
                     <button onClick={() => setCurrentDate(new Date(year, month + 1, 1))} className="px-2.5 py-1 border rounded-lg text-[11px] font-bold hover:bg-slate-50">次月</button>
-                    <button onClick={() => setIsCalendarOpen(false)} className="ml-2 text-slate-400 p-1 hover:bg-slate-100 rounded-lg"><i data-lucide="x" className="w-5 h-5"></i></button>
+                    <button onClick={() => setIsCalendarOpen(false)} className="ml-1 text-slate-400 p-1 hover:bg-slate-100 rounded-lg"><i data-lucide="x" className="w-5 h-5"></i></button>
                   </div>
                 </div>
+
                 <div className="grid grid-cols-7 text-center font-bold text-slate-400 text-[11px] mb-1 shrink-0">
                   <span className="text-rose-500">日</span><span>月</span><span>火</span><span>水</span><span>木</span><span>金</span><span className="text-blue-500">土</span>
                 </div>
-                <div className="grid grid-cols-7 flex-1 gap-0 bg-slate-200 border border-slate-200 rounded-xl overflow-hidden">
+
+                <div className="grid grid-cols-7 flex-1 gap-0 bg-slate-300 border border-slate-300 rounded-lg overflow-hidden">
                   {calendarDays.map((item, index) => {
-                    if (!item) return <div key={`empty-${index}`} className="bg-slate-50/70 border-[0.5px] border-slate-200 p-1"></div>;
+                    if (!item) return <div key={`empty-${index}`} className="bg-slate-100/70 border-[0.5px] border-slate-200 p-1"></div>;
                     const dayTodos = currentListTodos.filter(t => isTodoActiveOnDate(t, item.dateStr));
                     const dayMemoCount = memos.filter(m => m.date === item.dateStr).length;
                     const dayEvs = events.filter(e => e.date === item.dateStr);
@@ -922,9 +941,9 @@
                     const isPay = calPaydayStr === item.dateStr;
 
                     return (
-                      <div key={item.dateStr} onClick={() => setSelectedDayDetailDate(item.dateStr)} className="border-[0.5px] border-slate-200 bg-white p-1 flex flex-col justify-between hover:bg-indigo-50/40 transition cursor-pointer overflow-hidden group">
+                      <div key={item.dateStr} onClick={() => setSelectedDayDetailDate(item.dateStr)} className="border-[0.5px] border-slate-200 bg-white p-1 flex flex-col justify-between hover:bg-indigo-50/50 transition cursor-pointer overflow-hidden">
                         <div className="flex items-center justify-between shrink-0">
-                          <span className={`text-[10px] font-bold px-1 rounded ${isPay ? 'text-emerald-700 bg-emerald-100' : 'text-slate-700'}`}>{item.day} {isPay && '💰'}</span>
+                          <span className={`text-[10px] font-extrabold px-1 rounded ${isPay ? 'text-emerald-700 bg-emerald-100' : 'text-slate-700'}`}>{item.day} {isPay && '💰'}</span>
                           {dayMemoCount > 0 && <span className="text-[8px] bg-amber-100 text-amber-800 font-extrabold px-1 rounded">📌</span>}
                         </div>
                         <div className="space-y-0.5 overflow-hidden flex-1 mt-0.5">
@@ -1040,6 +1059,7 @@
                   <input type="text" value={formTitle} onChange={(e) => setFormTitle(e.target.value)} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-base outline-none focus:ring-2 focus:ring-indigo-500 font-bold" placeholder="タイトル" required />
                   <textarea value={formDetail} onChange={(e) => setFormDetail(e.target.value)} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-base outline-none focus:ring-2 focus:ring-indigo-500 h-16" placeholder="詳細メモ..." />
 
+                  {/* 期間設定ブロック (タップでカレンダーを開く仕様) */}
                   <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/60 space-y-2">
                     <div className="flex items-center justify-between">
                       <label className="text-[10px] font-bold text-slate-600">日付・期間を設定する</label>
@@ -1053,39 +1073,29 @@
                           <button type="button" onClick={() => setFormDateMode('specific')} className={`flex-1 py-1 rounded-md transition ${formDateMode === 'specific' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-600'}`}>特定の数日 (複数)</button>
                         </div>
 
-                        {formDateMode === 'range' ? (
-                          <div className="space-y-1">
-                            <div className="flex items-center justify-between bg-white px-2 py-1.5 border rounded-lg">
-                              <span className="text-[11px] font-bold text-slate-700 truncate mr-2">
-                                {formStartDate ? (formEndDate ? `${formStartDate} 〜 ${formEndDate}` : `${formStartDate} (1日間)`) : 'カレンダーから選択'}
-                              </span>
-                              <div className="flex gap-1 shrink-0">
-                                {formStartDate && <button type="button" onClick={() => { setFormStartDate(''); setFormEndDate(''); }} className="text-rose-500 text-[10px] font-bold px-1.5 py-0.5 bg-rose-50 rounded">クリア</button>}
-                                <button type="button" onClick={() => setIsPickerOpen(!isPickerOpen)} className="bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded text-[10px] font-bold">📅 カレンダーを開く</button>
-                              </div>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="space-y-1">
-                            <div className="flex items-center justify-between bg-white px-2 py-1.5 border rounded-lg">
-                              <span className="text-[11px] font-bold text-slate-700 truncate mr-2">
-                                {formSpecificDates.length > 0 ? `選択中: ${formSpecificDates.join(', ')}` : 'カレンダーから複数選択'}
-                              </span>
-                              <div className="flex gap-1 shrink-0">
-                                {formSpecificDates.length > 0 && <button type="button" onClick={() => setFormSpecificDates([])} className="text-rose-500 text-[10px] font-bold px-1.5 py-0.5 bg-rose-50 rounded">クリア</button>}
-                                <button type="button" onClick={() => setIsPickerOpen(!isPickerOpen)} className="bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded text-[10px] font-bold">📅 カレンダーを開く</button>
-                              </div>
-                            </div>
-                          </div>
-                        )}
+                        {/* 表示部分自体をボタン化してタップ可能に */}
+                        <div 
+                          onClick={() => setIsPickerOpen(!isPickerOpen)} 
+                          className="flex items-center justify-between bg-white px-3 py-2 border rounded-xl cursor-pointer hover:border-indigo-400 transition"
+                        >
+                          <span className="text-xs font-bold text-slate-700 truncate">
+                            {formDateMode === 'range' ? (
+                              formStartDate ? (formEndDate ? `📅 ${formStartDate} 〜 ${formEndDate}` : `📅 ${formStartDate}`) : '📅 日付を選択してください'
+                            ) : (
+                              formSpecificDates.length > 0 ? `📅 ${formSpecificDates.join(', ')}` : '📅 複数日付を選択してください'
+                            )}
+                          </span>
+                          <i data-lucide={isPickerOpen ? "chevron-up" : "chevron-down"} className="w-4 h-4 text-slate-400 shrink-0 ml-1"></i>
+                        </div>
 
+                        {/* ミニカレンダーピッカー（タップで追加・解除のトグル動作） */}
                         {isPickerOpen && (
-                          <div className="bg-white border p-2 rounded-xl space-y-2 shadow-sm">
+                          <div className="bg-white border p-2.5 rounded-xl space-y-2 shadow-sm">
                             <div className="flex items-center justify-between text-xs font-bold">
                               <span>{pickerYear}年 {pickerMonth + 1}月</span>
                               <div className="flex gap-1">
-                                <button type="button" onClick={() => { if(pickerMonth === 0){ setPickerMonth(11); setPickerYear(pickerYear-1); } else setPickerMonth(pickerMonth-1); }} className="px-2 py-0.5 border rounded">◀</button>
-                                <button type="button" onClick={() => { if(pickerMonth === 11){ setPickerMonth(0); setPickerYear(pickerYear+1); } else setPickerMonth(pickerMonth+1); }} className="px-2 py-0.5 border rounded">▶</button>
+                                <button type="button" onClick={() => { if(pickerMonth === 0){ setPickerMonth(11); setPickerYear(pickerYear-1); } else setPickerMonth(pickerMonth-1); }} className="px-2 py-0.5 border rounded hover:bg-slate-50">◀</button>
+                                <button type="button" onClick={() => { if(pickerMonth === 11){ setPickerMonth(0); setPickerYear(pickerYear+1); } else setPickerMonth(pickerMonth+1); }} className="px-2 py-0.5 border rounded hover:bg-slate-50">▶</button>
                               </div>
                             </div>
                             <div className="grid grid-cols-7 gap-1 text-center font-bold text-[9px] text-slate-400">
@@ -1106,7 +1116,12 @@
                                     isSelected = formSpecificDates.includes(dStr);
                                   }
                                   days.push(
-                                    <button key={dStr} type="button" onClick={() => handlePickerDateClick(dStr)} className={`h-7 rounded text-[10px] font-bold transition ${isSelected ? 'bg-indigo-600 text-white shadow-xs' : 'bg-slate-50 hover:bg-slate-100 text-slate-700'}`}>
+                                    <button 
+                                      key={dStr} 
+                                      type="button" 
+                                      onClick={() => handlePickerDateClick(dStr)} 
+                                      className={`h-7 rounded text-[10px] font-bold transition ${isSelected ? 'bg-indigo-600 text-white shadow-xs' : 'bg-slate-50 hover:bg-slate-100 text-slate-700'}`}
+                                    >
                                       {i}
                                     </button>
                                   );
