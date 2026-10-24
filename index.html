@@ -178,6 +178,8 @@
       const [isCalendarOpen, setIsCalendarOpen] = useState(false);
       const [isModalOpen, setIsModalOpen] = useState(false);
       const [isNewListModalOpen, setIsNewListModalOpen] = useState(false);
+      const [isEditListModalOpen, setIsEditListModalOpen] = useState(false);
+      const [editListNameInput, setEditListNameInput] = useState('');
       const [isSettingsOpen, setIsSettingsOpen] = useState(false);
       const [settingsTab, setSettingsTab] = useState('account');
       const [isTrashOpen, setIsTrashOpen] = useState(false);
@@ -651,6 +653,41 @@
         setNewListName(''); setIsNewListModalOpen(false);
       };
 
+      // リスト編集モーダルを開く処理
+      const handleOpenEditListModal = () => {
+        const target = lists.find(l => l.id === selectedListId);
+        if (target) {
+          setEditListNameInput(target.name);
+          setIsEditListModalOpen(true);
+        }
+      };
+
+      // リスト名の更新処理
+      const handleUpdateListName = (e) => {
+        e.preventDefault();
+        if (!editListNameInput.trim()) return;
+        const nextLists = lists.map(l => l.id === selectedListId ? { ...l, name: editListNameInput.trim() } : l);
+        setLists(nextLists);
+        saveUserDataToFirebase({ lists: nextLists });
+        setIsEditListModalOpen(false);
+      };
+
+      // 現在選択中のリストの削除処理
+      const handleDeleteCurrentList = () => {
+        if (lists.length <= 1) {
+          alert('最後のリストは削除できません。');
+          return;
+        }
+        if (!confirm('このリストを削除してもよろしいですか？')) return;
+        
+        const nextLists = lists.filter(l => l.id !== selectedListId);
+        const nextSelectedId = nextLists[0].id;
+        setLists(nextLists);
+        setSelectedListId(nextSelectedId);
+        saveUserDataToFirebase({ lists: nextLists, selectedListId: nextSelectedId });
+        setIsEditListModalOpen(false);
+      };
+
       const handleSaveLocation = (code) => { setLocationCode(code); saveUserDataToFirebase({ locationCode: code }); };
       const handleSaveTheme = (th) => { setTheme(th); saveUserDataToFirebase({ theme: th }); };
       const handleSavePayday = (pd, adj) => { setPayday(pd); setPaydayAdjustment(adj); saveUserDataToFirebase({ payday: pd, paydayAdjustment: adj }); };
@@ -801,12 +838,17 @@
       return (
         <div className={`min-h-screen text-xs flex flex-col ${themeStyles.fontStyle} pb-16`}>
           <header className={`border-b px-4 py-2 flex items-center justify-between sticky top-0 z-20 ${themeStyles.headerBg}`}>
-            <div className="flex items-center gap-2 min-w-0 flex-1">
+            <div className="flex items-center gap-1.5 min-w-0 flex-1">
               <span className="text-sm">✨</span>
-              <select value={selectedListId} onChange={(e) => { setSelectedListId(e.target.value); saveUserDataToFirebase({ selectedListId: e.target.value }); }} className="bg-transparent font-black outline-none text-sm cursor-pointer truncate max-w-[180px] sm:max-w-xs py-0.5">
+              <select value={selectedListId} onChange={(e) => { setSelectedListId(e.target.value); saveUserDataToFirebase({ selectedListId: e.target.value }); }} className="bg-transparent font-black outline-none text-sm cursor-pointer truncate max-w-[140px] sm:max-w-xs py-0.5">
                 {lists.map(l => <option key={l.id} value={l.id} className="text-slate-900 font-bold">{l.name}</option>)}
               </select>
-              <button onClick={() => setIsNewListModalOpen(true)} className="opacity-70 hover:opacity-100 p-1 rounded-lg transition shrink-0 hover-scale" title="リスト作成">
+              {/* リスト編集ボタン */}
+              <button onClick={handleOpenEditListModal} className="opacity-60 hover:opacity-100 p-1 rounded-lg transition shrink-0 hover-scale" title="リスト編集">
+                <i data-lucide="edit-2" className="w-3.5 h-3.5"></i>
+              </button>
+              {/* リスト新規作成ボタン */}
+              <button onClick={() => setIsNewListModalOpen(true)} className="opacity-60 hover:opacity-100 p-1 rounded-lg transition shrink-0 hover-scale" title="新規リスト作成">
                 <i data-lucide="plus" className="w-4 h-4"></i>
               </button>
             </div>
@@ -1333,6 +1375,31 @@
                   <div className="flex justify-end gap-2 pt-2 border-t">
                     <button type="button" onClick={() => setIsEventModalOpen(false)} className="px-4 py-2 border rounded-xl text-xs font-bold">キャンセル</button>
                     <button type="submit" className={`px-4 py-2 rounded-xl text-xs font-bold ${themeStyles.primaryBtn}`}>保存</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* リスト編集モーダル */}
+          {isEditListModalOpen && (
+            <div className="fixed inset-0 bg-slate-950/70 flex items-center justify-center p-3 z-50">
+              <div className="bg-white rounded-3xl w-full max-w-sm p-5 shadow-2xl border space-y-3.5 animate-modal">
+                <div className="flex justify-between items-center border-b pb-2">
+                  <h2 className="text-xs font-bold">マイリストの編集</h2>
+                  <button onClick={() => setIsEditListModalOpen(false)} className="opacity-60 hover:opacity-100 p-1"><i data-lucide="x" className="w-4 h-4"></i></button>
+                </div>
+                <form onSubmit={handleUpdateListName} className="space-y-3">
+                  <div>
+                    <label className="block text-[10px] opacity-60 font-bold mb-1">リスト名</label>
+                    <input type="text" value={editListNameInput} onChange={(e) => setEditListNameInput(e.target.value)} className="w-full px-3.5 py-2.5 border rounded-2xl text-sm font-bold outline-none" placeholder="リスト名を入力..." required />
+                  </div>
+                  <div className="flex items-center justify-between pt-2">
+                    <button type="button" onClick={handleDeleteCurrentList} className="bg-rose-500/10 text-rose-600 px-3 py-2 rounded-xl text-xs font-bold hover:bg-rose-500/20">リスト削除</button>
+                    <div className="flex gap-2">
+                      <button type="button" onClick={() => setIsEditListModalOpen(false)} className="px-4 py-2 border rounded-xl text-xs font-bold">キャンセル</button>
+                      <button type="submit" className={`px-4 py-2 rounded-xl text-xs font-bold ${themeStyles.primaryBtn}`}>変更を保存</button>
+                    </div>
                   </div>
                 </form>
               </div>
