@@ -151,6 +151,11 @@
       const [activeTab, setActiveTab] = useState('today');
       const [theme, setTheme] = useState('simple');
 
+      // 日めくりカレンダー用の選択中日付（初期値は本日の日付文字列 'YYYY-MM-DD'）
+      const realTodayObj = new Date();
+      const realTodayStr = realTodayObj.toISOString().split('T')[0];
+      const [viewingDateStr, setViewingDateStr] = useState(realTodayStr);
+
       const [lists, setLists] = useState([{ id: '1', name: 'メインリスト' }]);
       const [selectedListId, setSelectedListId] = useState('1');
       const [todos, setTodos] = useState([]);
@@ -656,7 +661,7 @@
       };
 
       const openModalForCreate = () => {
-        openModalForCreateFromDate(new Date().toISOString().split('T')[0]);
+        openModalForCreateFromDate(viewingDateStr);
       };
 
       const openModalForEdit = (todo) => {
@@ -664,8 +669,8 @@
         setFormTitle(todo.title); setFormDetail(todo.detail);
         setFormHasDate(todo.hasDate !== false);
         setFormDateMode(todo.dateMode || 'range');
-        setFormStartDate(todo.startDate || new Date().toISOString().split('T')[0]);
-        setFormEndDate(todo.endDate || new Date().toISOString().split('T')[0]);
+        setFormStartDate(todo.startDate || viewingDateStr);
+        setFormEndDate(todo.endDate || viewingDateStr);
         setFormSpecificDates(todo.specificDates || []);
         setFormHasTime(!!todo.hasTime); setFormTime(todo.time || '09:00');
         setFormIsEssential(!!todo.isEssential); setFormIsLocked(!!todo.isLocked);
@@ -761,12 +766,11 @@
         }
       };
 
-      const todayObj = new Date();
-      const todayStr = todayObj.toISOString().split('T')[0];
-      const currentYear = todayObj.getFullYear();
-      const currentMonth = todayObj.getMonth() + 1;
+      const currentYear = currentDate.getFullYear();
+      const currentMonth = currentDate.getMonth() + 1;
       const calculatedPaydayStr = getAdjustedPaydayDateStr(currentYear, currentMonth, payday, paydayAdjustment);
-      const isTodayPayday = calculatedPaydayStr === todayStr;
+      const isViewingPayday = calculatedPaydayStr === viewingDateStr;
+      const isViewingToday = viewingDateStr === realTodayStr;
 
       const currentListTodos = todos.filter(t => t.listId === selectedListId);
 
@@ -777,7 +781,7 @@
       const upcomingEssentialTodos = currentListTodos.filter(t => {
         if (!t.isEssential || t.completed || !t.hasDate) return false;
         const targetDate = t.dateMode === 'specific' ? (t.specificDates && t.specificDates[0]) : t.startDate;
-        return targetDate && targetDate >= todayStr && targetDate <= noticeTargetStr;
+        return targetDate && targetDate >= realTodayStr && targetDate <= noticeTargetStr;
       });
 
       const filteredTodos = currentListTodos.filter(t => {
@@ -785,11 +789,11 @@
         const matchesTag = selectedTagFilter === 'すべて' || (t.tags && t.tags.includes(selectedTagFilter));
         let matchesDate = true;
         if (selectedDateFilter === 'today') {
-          matchesDate = isTodoActiveOnDate(t, todayStr);
+          matchesDate = isTodoActiveOnDate(t, viewingDateStr);
         } else if (selectedDateFilter === 'this_week') {
-          const weekLaterObj = new Date(); weekLaterObj.setDate(weekLaterObj.getDate() + 7);
+          const weekLaterObj = new Date(viewingDateStr); weekLaterObj.setDate(weekLaterObj.getDate() + 7);
           const weekLaterStr = weekLaterObj.toISOString().split('T')[0];
-          matchesDate = isTodoActiveOnDate(t, todayStr) || isTodoActiveOnDate(t, weekLaterStr);
+          matchesDate = isTodoActiveOnDate(t, viewingDateStr) || isTodoActiveOnDate(t, weekLaterStr);
         } else if (selectedDateFilter === 'no_date') {
           matchesDate = t.hasDate === false;
         }
@@ -802,14 +806,28 @@
         } else return b.id.localeCompare(a.id);
       });
 
-      const todayTodos = currentListTodos.filter(t => isTodoActiveOnDate(t, todayStr));
-      const todayMemos = memos.filter(m => !m.date || m.date === todayStr);
-      const todayEvents = events.filter(e => e.date === todayStr);
-      const todayHolidays = holidays.filter(h => h.date === todayStr);
-      const todayWorkHours = workHours[todayStr];
+      const viewingTodos = currentListTodos.filter(t => isTodoActiveOnDate(t, viewingDateStr));
+      const viewingMemos = memos.filter(m => !m.date || m.date === viewingDateStr);
+      const viewingEvents = events.filter(e => e.date === viewingDateStr);
+      const viewingHolidays = holidays.filter(h => h.date === viewingDateStr);
+      const viewingWorkHours = workHours[viewingDateStr];
 
-      const dayOfWeekStr = ['日', '月', '火', '水', '木', '金', '土'][todayObj.getDay()];
-      const formattedToday = `${todayObj.getMonth() + 1}月${todayObj.getDate()}日 (${dayOfWeekStr})`;
+      const viewingDateObj = new Date(viewingDateStr);
+      const dayOfWeekStr = ['日', '月', '火', '水', '木', '金', '土'][viewingDateObj.getDay()];
+      const formattedViewingDate = `${viewingDateObj.getMonth() + 1}月${viewingDateObj.getDate()}日 (${dayOfWeekStr})`;
+
+      // 日めくり用ハンドラー
+      const handlePrevDay = () => {
+        const d = new Date(viewingDateStr);
+        d.setDate(d.getDate() - 1);
+        setViewingDateStr(d.toISOString().split('T')[0]);
+      };
+
+      const handleNextDay = () => {
+        const d = new Date(viewingDateStr);
+        d.setDate(d.getDate() + 1);
+        setViewingDateStr(d.toISOString().split('T')[0]);
+      };
 
       const year = currentDate.getFullYear();
       const month = currentDate.getMonth();
@@ -922,11 +940,25 @@
                   </div>
                 )}
 
+                {/* 日めくりコントロールバー */}
+                <div className="bg-slate-900 text-white rounded-2xl p-2.5 flex items-center justify-between shadow-md">
+                  <button onClick={handlePrevDay} className="px-3 py-1 bg-white/10 hover:bg-white/20 rounded-xl text-xs font-bold transition">◀ 前日</button>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-extrabold">{formattedViewingDate}</span>
+                    {!isViewingToday && (
+                      <button onClick={() => setViewingDateStr(realTodayStr)} className="bg-blue-600 hover:bg-blue-500 text-white px-2 py-0.5 rounded-lg text-[10px] font-bold shadow-xs transition">
+                        本日へ
+                      </button>
+                    )}
+                  </div>
+                  <button onClick={handleNextDay} className="px-3 py-1 bg-white/10 hover:bg-white/20 rounded-xl text-xs font-bold transition">翌日 ▶</button>
+                </div>
+
                 <div className={`p-2.5 ${themeStyles.cardBg} space-y-2`}>
                   <div className="flex items-center justify-between">
                     <div>
-                      <span className={`text-[9px] uppercase tracking-widest ${themeStyles.accentText}`}>TODAY'S SCHEDULE</span>
-                      <div className="text-sm font-black mt-0.5">{formattedToday}</div>
+                      <span className={`text-[9px] uppercase tracking-widest ${themeStyles.accentText}`}>SCHEDULE VIEW</span>
+                      <div className="text-sm font-black mt-0.5">{formattedViewingDate} {isViewingToday && '🌟(本日)'}</div>
                     </div>
                     <div className="flex items-center gap-2 bg-black/5 px-2.5 py-1 rounded-xl border border-black/5">
                       <span className="text-base">{weather.icon}</span>
@@ -937,34 +969,34 @@
                     </div>
                   </div>
 
-                  {todayWorkHours ? (
+                  {viewingWorkHours ? (
                     <div className="bg-blue-500/10 border border-blue-500/35 rounded-lg px-2.5 py-1 flex items-center justify-between text-blue-700 font-bold text-[11px]">
-                      <span>💼 本日の仕事時間: {todayWorkHours.start} 〜 {todayWorkHours.end}</span>
+                      <span>💼 仕事時間: {viewingWorkHours.start} 〜 {viewingWorkHours.end}</span>
                     </div>
                   ) : (
                     <div className="bg-slate-100 border border-slate-200 rounded-lg px-2.5 py-1 flex items-center justify-between text-slate-500 font-bold text-[11px]">
-                      <span>💼 本日の仕事時間: 未設定</span>
+                      <span>💼 仕事時間: 未設定</span>
                     </div>
                   )}
 
-                  {(todayEvents.length > 0 || todayHolidays.length > 0 || isTodayPayday) && (
+                  {(viewingEvents.length > 0 || viewingHolidays.length > 0 || isViewingPayday) && (
                     <div className="pt-1.5 border-t border-black/5 flex flex-wrap gap-1">
-                      {isTodayPayday && <span className="bg-emerald-500/20 text-emerald-700 font-extrabold text-[9px] px-2 py-0.5 rounded-lg">💰 給料日</span>}
-                      {todayEvents.map(ev => <span key={ev.id} className="bg-purple-500/20 text-purple-700 font-bold text-[9px] px-2 py-0.5 rounded-lg">{ev.icon || '🎉'} {ev.title}</span>)}
-                      {todayHolidays.map(hol => <span key={hol.id} className="bg-amber-500/20 text-amber-700 font-bold text-[9px] px-2 py-0.5 rounded-lg">🏖️ {hol.memberName} のお休み</span>)}
+                      {isViewingPayday && <span className="bg-emerald-500/20 text-emerald-700 font-extrabold text-[9px] px-2 py-0.5 rounded-lg">💰 給料日</span>}
+                      {viewingEvents.map(ev => <span key={ev.id} className="bg-purple-500/20 text-purple-700 font-bold text-[9px] px-2 py-0.5 rounded-lg">{ev.icon || '🎉'} {ev.title}</span>)}
+                      {viewingHolidays.map(hol => <span key={hol.id} className="bg-amber-500/20 text-amber-700 font-bold text-[9px] px-2 py-0.5 rounded-lg">🏖️ {hol.memberName} のお休み</span>)}
                     </div>
                   )}
                 </div>
 
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between px-1">
-                    <span className="font-extrabold opacity-80 text-[11px]">本日のタスク ({todayTodos.length}件)</span>
+                    <span className="font-extrabold opacity-80 text-[11px]">予定タスク ({viewingTodos.length}件)</span>
                   </div>
-                  {todayTodos.length === 0 ? (
-                    <div className={`p-4 text-center opacity-50 text-xs ${themeStyles.cardBg}`}>本日の予定はありません。</div>
+                  {viewingTodos.length === 0 ? (
+                    <div className={`p-4 text-center opacity-50 text-xs ${themeStyles.cardBg}`}>この日の予定はありません。</div>
                   ) : (
                     <div className="bg-white border border-slate-200/80 rounded-xl overflow-hidden divide-y divide-slate-100 shadow-2xs">
-                      {todayTodos.map(todo => (
+                      {viewingTodos.map(todo => (
                         <div key={todo.id} className={`px-3 py-2 transition flex items-center justify-between gap-2 ${todo.isEssential ? 'bg-red-500/5' : ''} ${todo.completed ? 'opacity-40 bg-slate-50' : ''}`}>
                           <div className="flex items-center gap-2.5 flex-1 min-w-0">
                             <input type="checkbox" checked={todo.completed} onChange={() => toggleComplete(todo.id)} className="w-3.5 h-3.5 text-indigo-600 rounded cursor-pointer shrink-0" />
@@ -987,14 +1019,14 @@
                 </div>
 
                 <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-2.5 space-y-2">
-                  <span className="font-extrabold text-amber-800 text-[11px] block">📌 本日のメモ</span>
+                  <span className="font-extrabold text-amber-800 text-[11px] block">📌 この日のメモ</span>
                   <div className="flex gap-1.5">
-                    <input type="text" placeholder="例: 牛乳を買う..." value={newQuickMemo} onChange={(e) => setNewQuickMemo(e.target.value)} className="flex-1 px-3 py-1.5 bg-white border border-amber-500/30 rounded-lg text-xs outline-none" onKeyDown={(e) => { if (e.key === 'Enter') handleAddMemo(todayStr); }} />
-                    <button onClick={() => handleAddMemo(todayStr)} className="bg-amber-600 text-white px-3 py-1.5 rounded-lg text-[11px] font-bold shadow-2xs shrink-0 hover-scale">追加</button>
+                    <input type="text" placeholder="例: メモを入力..." value={newQuickMemo} onChange={(e) => setNewQuickMemo(e.target.value)} className="flex-1 px-3 py-1.5 bg-white border border-amber-500/30 rounded-lg text-xs outline-none" onKeyDown={(e) => { if (e.key === 'Enter') handleAddMemo(viewingDateStr); }} />
+                    <button onClick={() => handleAddMemo(viewingDateStr)} className="bg-amber-600 text-white px-3 py-1.5 rounded-lg text-[11px] font-bold shadow-2xs shrink-0 hover-scale">追加</button>
                   </div>
-                  {todayMemos.length > 0 && (
+                  {viewingMemos.length > 0 && (
                     <div className="bg-white border border-amber-500/20 rounded-lg overflow-hidden divide-y divide-amber-100">
-                      {todayMemos.map(memo => (
+                      {viewingMemos.map(memo => (
                         <div key={memo.id} className="px-2.5 py-1.5 flex items-center justify-between text-[11px]">
                           <div className="flex items-center gap-2 flex-1 min-w-0">
                             <input type="checkbox" checked={memo.completed} onChange={() => toggleMemoComplete(memo.id)} className="w-3.5 h-3.5 text-amber-600 rounded cursor-pointer shrink-0" />
@@ -1019,7 +1051,7 @@
                   <div className="flex items-center justify-between gap-2">
                     <select value={selectedDateFilter} onChange={(e) => setSelectedDateFilter(e.target.value)} className="bg-black/5 px-2 py-1 rounded-lg text-[10px] font-bold outline-none flex-1">
                       <option value="すべて">📅 期間: すべて</option>
-                      <option value="today">📅 期間: 本日</option>
+                      <option value="today">📅 期間: 表示中日</option>
                       <option value="this_week">📅 期間: 今週以内</option>
                       <option value="no_date">📅 期間: 期限なし</option>
                     </select>
@@ -1120,15 +1152,15 @@
                     const dayHols = holidays.filter(h => h.date === item.dateStr);
                     const dayWork = workHours[item.dateStr];
                     const isPay = calPaydayStr === item.dateStr;
-                    const isToday = item.dateStr === todayStr;
+                    const isToday = item.dateStr === realTodayStr;
                     const hasEssential = dayTodos.some(t => t.isEssential && !t.completed);
 
                     return (
                       <div key={item.dateStr} onClick={() => {
-                        setSelectedDayDetailDate(item.dateStr);
-                        setIsEditingWorkHours(false);
-                        if (dayWork) { setWorkStartInput(dayWork.start); setWorkEndInput(dayWork.end); }
-                        else { setWorkStartInput(defaultWorkStart); setWorkEndInput(defaultWorkEnd); }
+                        // カレンダーからその日のページ（本日タブ）にダイレクトジャンプ
+                        setViewingDateStr(item.dateStr);
+                        setActiveTab('today');
+                        setIsCalendarOpen(false);
                       }} className={`p-1 flex flex-col justify-between transition cursor-pointer overflow-hidden relative ${isToday ? themeStyles.todayCell : 'bg-white hover:bg-indigo-50/50'} ${hasEssential ? 'ring-2 ring-inset ring-red-400' : ''}`}>
                         <div className="flex items-center justify-between shrink-0">
                           <span className={`text-[10px] font-black px-1 rounded ${isPay ? 'text-emerald-700 bg-emerald-100' : isToday ? 'font-extrabold underline' : 'text-slate-700'}`}>
@@ -1247,7 +1279,7 @@
             );
           })()}
 
-          {/* スマホ対応：日付と時間の隙間をなくし、「お休み」ボタンをすっきり収納した一括表編集モーダル */}
+          {/* 一括表編集モーダル */}
           {isBulkWorkModalOpen && (
             <div className="fixed inset-0 bg-slate-950/70 flex items-center justify-center p-2 z-50">
               <div className="bg-white rounded-3xl w-full max-w-md p-3.5 shadow-2xl border space-y-2.5 animate-modal flex flex-col max-h-[92vh]">
@@ -1270,14 +1302,12 @@
 
                       return (
                         <div key={dateStr} className={`flex items-center justify-between gap-1 px-2 py-1.5 rounded-xl ${isWeekend ? 'bg-slate-50' : 'bg-white'}`}>
-                          {/* 日付と曜日（隙間をなくすため幅を最小限に） */}
                           <div className="flex items-center shrink-0 w-12">
                             <span className={`text-[11px] font-bold ${dObj.getDay() === 0 ? 'text-rose-500' : dObj.getDay() === 6 ? 'text-blue-500' : 'text-slate-800'}`}>
                               {dObj.getDate()}({dayOfWeek})
                             </span>
                           </div>
 
-                          {/* 時間入力とお休みボタンを隙間なく配置 */}
                           <div className="flex items-center gap-1 flex-1 justify-end">
                             <input 
                               type="time" 
