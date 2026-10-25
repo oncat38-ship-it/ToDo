@@ -185,6 +185,15 @@
       const [isTrashOpen, setIsTrashOpen] = useState(false);
       const [isEventModalOpen, setIsEventModalOpen] = useState(false);
       
+      // 一括勤務時間設定モーダル用ステート
+      const [isBulkWorkModalOpen, setIsBulkWorkModalOpen] = useState(false);
+      const [bulkTargetMode, setBulkTargetMode] = useState('month'); // 'month' または 'range'
+      const [bulkStartInput, setBulkStartInput] = useState('09:00');
+      const [bulkEndInput, setBulkEndInput] = useState('18:00');
+      const [bulkStartDate, setBulkStartDate] = useState(new Date().toISOString().split('T')[0]);
+      const [bulkEndDate, setBulkEndDate] = useState(new Date().toISOString().split('T')[0]);
+      const [bulkApplyWeekdaysOnly, setBulkApplyWeekdaysOnly] = useState(true);
+
       const [selectedDayDetailDate, setSelectedDayDetailDate] = useState(null);
       const [isEditingWorkHours, setIsEditingWorkHours] = useState(false);
 
@@ -422,6 +431,60 @@
         setIsEditingWorkHours(false);
       };
 
+      // 一括勤務時間の保存処理
+      const handleSaveBulkWorkHours = (e) => {
+        e.preventDefault();
+        const nextHours = { ...workHours };
+        const targetYear = currentDate.getFullYear();
+        const targetMonth = currentDate.getMonth();
+
+        if (bulkTargetMode === 'month') {
+          // 現在表示中の月全体を対象にする
+          const daysInMonth = new Date(targetYear, targetMonth + 1, 0).getDate();
+          for (let d = 1; d <= daysInMonth; d++) {
+            const dateObj = new Date(targetYear, targetMonth, d);
+            const dayOfWeek = dateObj.getDay();
+            const dateStr = `${targetYear}-${String(targetMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+
+            if (bulkApplyWeekdaysOnly) {
+              // 土日(0と6)を除外
+              if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+                nextHours[dateStr] = { start: bulkStartInput, end: bulkEndInput };
+              }
+            } else {
+              nextHours[dateStr] = { start: bulkStartInput, end: bulkEndInput };
+            }
+          }
+        } else {
+          // 指定期間 (range) を対象にする
+          if (!bulkStartDate || !bulkEndDate) return;
+          let curr = new Date(bulkStartDate);
+          const endD = new Date(bulkEndDate);
+          if (curr > endD) return;
+
+          while (curr <= endD) {
+            const y = curr.getFullYear();
+            const m = curr.getMonth() + 1;
+            const d = curr.getDate();
+            const dateStr = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+            const dayOfWeek = curr.getDay();
+
+            if (bulkApplyWeekdaysOnly) {
+              if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+                nextHours[dateStr] = { start: bulkStartInput, end: bulkEndInput };
+              }
+            } else {
+              nextHours[dateStr] = { start: bulkStartInput, end: bulkEndInput };
+            }
+            curr.setDate(curr.getDate() + 1);
+          }
+        }
+
+        setWorkHours(nextHours);
+        saveUserDataToFirebase({ workHours: nextHours });
+        setIsBulkWorkModalOpen(false);
+      };
+
       const handleSaveDefaultWorkTemplate = (start, end) => {
         setDefaultWorkStart(start);
         setDefaultWorkEnd(end);
@@ -653,7 +716,6 @@
         setNewListName(''); setIsNewListModalOpen(false);
       };
 
-      // リスト編集モーダルを開く処理
       const handleOpenEditListModal = () => {
         const target = lists.find(l => l.id === selectedListId);
         if (target) {
@@ -662,7 +724,6 @@
         }
       };
 
-      // リスト名の更新処理
       const handleUpdateListName = (e) => {
         e.preventDefault();
         if (!editListNameInput.trim()) return;
@@ -672,7 +733,6 @@
         setIsEditListModalOpen(false);
       };
 
-      // 現在選択中のリストの削除処理
       const handleDeleteCurrentList = () => {
         if (lists.length <= 1) {
           alert('最後のリストは削除できません。');
@@ -843,11 +903,9 @@
               <select value={selectedListId} onChange={(e) => { setSelectedListId(e.target.value); saveUserDataToFirebase({ selectedListId: e.target.value }); }} className="bg-transparent font-black outline-none text-sm cursor-pointer truncate max-w-[140px] sm:max-w-xs py-0.5">
                 {lists.map(l => <option key={l.id} value={l.id} className="text-slate-900 font-bold">{l.name}</option>)}
               </select>
-              {/* リスト編集ボタン */}
               <button onClick={handleOpenEditListModal} className="opacity-60 hover:opacity-100 p-1 rounded-lg transition shrink-0 hover-scale" title="リスト編集">
                 <i data-lucide="edit-2" className="w-3.5 h-3.5"></i>
               </button>
-              {/* リスト新規作成ボタン */}
               <button onClick={() => setIsNewListModalOpen(true)} className="opacity-60 hover:opacity-100 p-1 rounded-lg transition shrink-0 hover-scale" title="新規リスト作成">
                 <i data-lucide="plus" className="w-4 h-4"></i>
               </button>
@@ -920,7 +978,6 @@
                   )}
                 </div>
 
-                {/* テーブル風コンパクトタスクリスト */}
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between px-1">
                     <span className="font-extrabold opacity-80 text-[11px]">本日のタスク ({todayTodos.length}件)</span>
@@ -951,7 +1008,6 @@
                   )}
                 </div>
 
-                {/* コンパクトな本日のメモセクション */}
                 <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-2.5 space-y-2">
                   <span className="font-extrabold text-amber-800 text-[11px] block">📌 本日のメモ</span>
                   <div className="flex gap-1.5">
@@ -997,7 +1053,6 @@
                   </div>
                 </div>
 
-                {/* テーブル風コンパクトToDoリスト */}
                 <div className="bg-white border border-slate-200/80 rounded-xl overflow-hidden divide-y divide-slate-100 shadow-2xs">
                   {filteredTodos.length === 0 ? (
                     <div className="p-6 text-center opacity-40 text-xs">タスクはありません</div>
@@ -1031,7 +1086,6 @@
                   </div>
                 </div>
 
-                {/* テーブル風コンパクトメモリスト */}
                 <div className="bg-white border border-slate-200/80 rounded-xl overflow-hidden divide-y divide-slate-100 shadow-2xs">
                   {memos.length === 0 ? (
                     <div className="p-6 text-center opacity-40 text-xs">メモはありません</div>
@@ -1119,6 +1173,14 @@
                     );
                   })}
                 </div>
+
+                {/* カレンダー下部の隙間スペースに配置した一括設定ボタン */}
+                <div className="p-3 bg-slate-50 border-t shrink-0 flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-slate-500">💡 勤務時間をまとめて登録できます</span>
+                  <button onClick={() => setIsBulkWorkModalOpen(true)} className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold shadow-xs transition hover-scale flex items-center gap-1">
+                    <span>💼 勤務時間を一括設定</span>
+                  </button>
+                </div>
               </div>
             </div>
           )}
@@ -1139,7 +1201,6 @@
                     <button onClick={() => setSelectedDayDetailDate(null)} className="opacity-60 hover:opacity-100 p-1"><i data-lucide="x" className="w-4 h-4"></i></button>
                   </div>
 
-                  {/* コンパクトな仕事時間ブロック */}
                   <div className="bg-blue-50/80 border border-blue-200 p-2.5 rounded-xl space-y-1.5">
                     <div className="flex items-center justify-between">
                       <span className="text-[10px] font-extrabold text-blue-900">💼 仕事時間</span>
@@ -1175,7 +1236,6 @@
                     )}
                   </div>
 
-                  {/* 予定・タスク一覧 */}
                   <div className="space-y-1.5 max-h-48 overflow-y-auto pr-0.5 text-xs">
                     {dayEvs.map(ev => (
                       <div key={ev.id} className="bg-purple-500/10 p-2 rounded-xl flex items-center justify-between">
@@ -1212,6 +1272,59 @@
             );
           })()}
 
+          {/* 一括勤務時間設定モーダル */}
+          {isBulkWorkModalOpen && (
+            <div className="fixed inset-0 bg-slate-950/70 flex items-center justify-center p-3 z-50">
+              <div className="bg-white rounded-3xl w-full max-w-sm p-5 shadow-2xl border space-y-4 animate-modal">
+                <div className="flex justify-between items-center border-b pb-2">
+                  <h2 className="text-xs font-bold">💼 勤務時間を一括設定</h2>
+                  <button onClick={() => setIsBulkWorkModalOpen(false)} className="opacity-60 hover:opacity-100 p-1"><i data-lucide="x" className="w-4 h-4"></i></button>
+                </div>
+
+                <form onSubmit={handleSaveBulkWorkHours} className="space-y-3.5">
+                  <div>
+                    <label className="block text-[10px] opacity-60 font-bold mb-1">対象の範囲</label>
+                    <div className="flex bg-black/10 p-0.5 rounded-xl text-xs font-bold">
+                      <button type="button" onClick={() => setBulkTargetMode('month')} className={`flex-1 py-1.5 rounded-lg ${bulkTargetMode === 'month' ? 'bg-white shadow-xs' : 'opacity-60'}`}>表示中の月全体 ({year}年{month + 1}月)</button>
+                      <button type="button" onClick={() => setBulkTargetMode('range')} className={`flex-1 py-1.5 rounded-lg ${bulkTargetMode === 'range' ? 'bg-white shadow-xs' : 'opacity-60'}`}>期間を指定</button>
+                    </div>
+                  </div>
+
+                  {bulkTargetMode === 'range' && (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-1.5">
+                        <input type="date" value={bulkStartDate} onChange={(e) => setBulkStartDate(e.target.value)} className="w-full px-3 py-2 border rounded-xl text-xs font-bold" required />
+                        <span className="font-bold opacity-60">〜</span>
+                        <input type="date" value={bulkEndDate} onChange={(e) => setBulkEndDate(e.target.value)} className="w-full px-3 py-2 border rounded-xl text-xs font-bold" required />
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="space-y-1">
+                    <label className="block text-[10px] opacity-60 font-bold">仕事時間</label>
+                    <div className="flex items-center gap-2">
+                      <input type="time" value={bulkStartInput} onChange={(e) => setBulkStartInput(e.target.value)} className="flex-1 px-3 py-2 border rounded-xl text-xs font-bold text-center" required />
+                      <span className="font-bold text-slate-500">〜</span>
+                      <input type="time" value={bulkEndInput} onChange={(e) => setBulkEndInput(e.target.value)} className="flex-1 px-3 py-2 border rounded-xl text-xs font-bold text-center" required />
+                    </div>
+                  </div>
+
+                  <div className="bg-black/5 p-3 rounded-xl">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input type="checkbox" checked={bulkApplyWeekdaysOnly} onChange={(e) => setBulkApplyWeekdaysOnly(e.target.checked)} className="w-4 h-4 text-blue-600 rounded" />
+                      <span className="text-xs font-bold">土日を除外して平日のみ適用する</span>
+                    </label>
+                  </div>
+
+                  <div className="flex justify-end gap-2 pt-2 border-t">
+                    <button type="button" onClick={() => setIsBulkWorkModalOpen(false)} className="px-4 py-2 border rounded-xl text-xs font-bold">キャンセル</button>
+                    <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-xs">一括適用して保存</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
           {/* Todo作成・編集モーダル */}
           {isModalOpen && (
             <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-3 z-50">
@@ -1225,7 +1338,6 @@
                   <input type="text" value={formTitle} onChange={(e) => setFormTitle(e.target.value)} className="w-full px-3.5 py-2.5 bg-black/5 border rounded-2xl text-sm font-bold" placeholder="タイトル" required />
                   <textarea value={formDetail} onChange={(e) => setFormDetail(e.target.value)} className="w-full px-3.5 py-2.5 bg-black/5 border rounded-2xl text-sm h-20" placeholder="詳細メモ..." />
 
-                  {/* 日付設定セクション */}
                   <div className="bg-black/5 p-3 rounded-2xl border space-y-2.5">
                     <div className="flex items-center justify-between">
                       <label className="text-xs font-bold opacity-80">日付・期間を設定</label>
@@ -1248,7 +1360,6 @@
                           <i data-lucide="chevron-down" className="w-4 h-4 opacity-50"></i>
                         </div>
 
-                        {/* カレンダーピッカー */}
                         {isPickerOpen && (
                           <div className="bg-white border p-3 rounded-2xl space-y-2">
                             <div className="flex justify-between text-xs font-bold">
@@ -1285,7 +1396,6 @@
                     )}
                   </div>
 
-                  {/* 時間設定 */}
                   <div className="bg-black/5 p-3 rounded-2xl border flex items-center justify-between">
                     <label className="text-xs font-bold opacity-80 flex items-center gap-2 cursor-pointer">
                       <input type="checkbox" checked={formHasTime} onChange={(e) => setFormHasTime(e.target.checked)} className="w-4 h-4 text-indigo-600 rounded" />
@@ -1296,7 +1406,6 @@
                     )}
                   </div>
 
-                  {/* フラグ設定 */}
                   <div className="flex items-center justify-between px-1">
                     <label className="flex items-center gap-2 cursor-pointer">
                       <input type="checkbox" checked={formIsEssential} onChange={(e) => setFormIsEssential(e.target.checked)} className="w-4 h-4 text-red-600 rounded" />
@@ -1308,7 +1417,6 @@
                     </label>
                   </div>
 
-                  {/* タグ設定 */}
                   <div className="space-y-1.5">
                     <label className="text-xs font-bold opacity-80">タグ選択</label>
                     <div className="flex flex-wrap gap-1.5">
@@ -1500,7 +1608,7 @@
                 )}
 
                 <div className="flex justify-end pt-2 border-t">
-                  <button onClick={() => setIsSettingsOpen(false)} className="px-4 py-1.5 rounded-xl text-xs font-bold bg-slate-900 text-white">閉じる</button>
+                  <button onClick={() => setIsSettingsOpen(true)} className="px-4 py-1.5 rounded-xl text-xs font-bold bg-slate-900 text-white">閉じる</button>
                 </div>
               </div>
             </div>
@@ -1512,7 +1620,7 @@
               <div className="bg-white rounded-3xl w-full max-w-sm p-5 shadow-2xl border space-y-3.5">
                 <div className="flex justify-between border-b pb-2">
                   <h2 className="text-xs font-bold">🗑️ ゴミ箱</h2>
-                  <button onClick={() => setIsTrashOpen(false)}><i data-lucide="x" className="w-4 h-4"></i></button>
+                  <button onClick={() => setIsTrashOpen(false)}><i data-lucide="x" className="w-4 h-4"></i></.button>
                 </div>
                 <div className="space-y-2 max-h-64 overflow-y-auto">
                   {trash.length === 0 ? <div className="p-6 text-center opacity-40 text-xs">ゴミ箱は空です</div> : trash.map(item => (
