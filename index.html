@@ -185,9 +185,8 @@
       const [isTrashOpen, setIsTrashOpen] = useState(false);
       const [isEventModalOpen, setIsEventModalOpen] = useState(false);
       
-      // テーブル形式一括勤務時間設定モーダル用ステート
       const [isBulkWorkModalOpen, setIsBulkWorkModalOpen] = useState(false);
-      const [bulkEditRows, setBulkEditRows] = useState({}); // { '2026-05-01': { start: '09:00', end: '18:00', enabled: true }, ... }
+      const [bulkEditRows, setBulkEditRows] = useState({});
 
       const [selectedDayDetailDate, setSelectedDayDetailDate] = useState(null);
       const [isEditingWorkHours, setIsEditingWorkHours] = useState(false);
@@ -425,15 +424,17 @@
         setIsEditingWorkHours(false);
       };
 
-      // テーブル形式の一括保存処理
       const handleSaveTableBulkWorkHours = (e) => {
         e.preventDefault();
         const nextHours = { ...workHours };
 
         Object.keys(bulkEditRows).forEach(dateStr => {
           const row = bulkEditRows[dateStr];
-          if (row.enabled) {
-            nextHours[dateStr] = { start: row.start, end: row.end };
+          const startVal = row.start.trim();
+          const endVal = row.end.trim();
+
+          if (startVal && endVal) {
+            nextHours[dateStr] = { start: startVal, end: endVal };
           } else {
             delete nextHours[dateStr];
           }
@@ -444,7 +445,6 @@
         setIsBulkWorkModalOpen(false);
       };
 
-      // テーブル一括モーダルを開くときに現在表示中月のデータを初期ロード
       const openBulkWorkModal = () => {
         const targetYear = currentDate.getFullYear();
         const targetMonth = currentDate.getMonth();
@@ -455,7 +455,6 @@
           const dateStr = `${targetYear}-${String(targetMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
           const existing = workHours[dateStr];
           rows[dateStr] = {
-            enabled: !!existing,
             start: existing ? existing.start : defaultWorkStart,
             end: existing ? existing.end : defaultWorkEnd
           };
@@ -1152,9 +1151,8 @@
                   })}
                 </div>
 
-                {/* カレンダー下部スペースのボタン（表形式の一括編集を開く） */}
                 <div className="p-3 bg-slate-50 border-t shrink-0 flex items-center justify-between">
-                  <span className="text-[11px] font-bold text-slate-500">💡 月の仕事を一覧テーブルで編集できます</span>
+                  <span className="text-[11px] font-bold text-slate-500">💡 テンプレ反映つきの一括表編集</span>
                   <button onClick={openBulkWorkModal} className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold shadow-xs transition hover-scale flex items-center gap-1">
                     <span>💼 仕事時間を一括表編集</span>
                   </button>
@@ -1249,21 +1247,21 @@
             );
           })()}
 
-          {/* 表形式の一括勤務時間設定モーダル */}
+          {/* スマホ対応：日付と時間の隙間をなくし、「お休み」ボタンをすっきり収納した一括表編集モーダル */}
           {isBulkWorkModalOpen && (
-            <div className="fixed inset-0 bg-slate-950/70 flex items-center justify-center p-3 z-50">
-              <div className="bg-white rounded-3xl w-full max-w-lg p-5 shadow-2xl border space-y-4 animate-modal flex flex-col max-h-[90vh]">
+            <div className="fixed inset-0 bg-slate-950/70 flex items-center justify-center p-2 z-50">
+              <div className="bg-white rounded-3xl w-full max-w-md p-3.5 shadow-2xl border space-y-2.5 animate-modal flex flex-col max-h-[92vh]">
                 <div className="flex justify-between items-center border-b pb-2 shrink-0">
-                  <h2 className="text-xs font-bold">💼 仕事時間の一括表編集 ({year}年{month + 1}月)</h2>
+                  <h2 className="text-xs font-bold">💼 仕事時間の一括編集 ({year}年{month + 1}月)</h2>
                   <button onClick={() => setIsBulkWorkModalOpen(false)} className="opacity-60 hover:opacity-100 p-1"><i data-lucide="x" className="w-4 h-4"></i></button>
                 </div>
 
-                <div className="text-[11px] opacity-70 shrink-0">
-                  各日付ごとに仕事時間を設定・調整できます。チェックを外すとその日の仕事時間は解除されます。
+                <div className="text-[10px] opacity-70 shrink-0">
+                  💡 テンプレが入力されています。「お休み」で空白にします。
                 </div>
 
-                <form onSubmit={handleSaveTableBulkWorkHours} className="space-y-3 flex-1 flex flex-col min-h-0">
-                  <div className="flex-1 overflow-y-auto border rounded-2xl divide-y divide-slate-100 p-2 space-y-1">
+                <form onSubmit={handleSaveTableBulkWorkHours} className="space-y-2.5 flex-1 flex flex-col min-h-0">
+                  <div className="flex-1 overflow-y-auto border rounded-2xl divide-y divide-slate-100 p-1 space-y-1">
                     {Object.keys(bulkEditRows).sort().map(dateStr => {
                       const row = bulkEditRows[dateStr];
                       const dObj = new Date(dateStr);
@@ -1271,56 +1269,59 @@
                       const isWeekend = dObj.getDay() === 0 || dObj.getDay() === 6;
 
                       return (
-                        <div key={dateStr} className={`flex items-center justify-between gap-2 p-1.5 rounded-xl ${isWeekend ? 'bg-slate-50' : 'bg-white'}`}>
-                          <div className="flex items-center gap-2 shrink-0 w-28">
-                            <input 
-                              type="checkbox" 
-                              checked={row.enabled} 
-                              onChange={(e) => {
-                                const next = { ...bulkEditRows };
-                                next[dateStr].enabled = e.target.checked;
-                                setBulkEditRows(next);
-                              }} 
-                              className="w-4 h-4 text-blue-600 rounded cursor-pointer" 
-                            />
+                        <div key={dateStr} className={`flex items-center justify-between gap-1 px-2 py-1.5 rounded-xl ${isWeekend ? 'bg-slate-50' : 'bg-white'}`}>
+                          {/* 日付と曜日（隙間をなくすため幅を最小限に） */}
+                          <div className="flex items-center shrink-0 w-12">
                             <span className={`text-[11px] font-bold ${dObj.getDay() === 0 ? 'text-rose-500' : dObj.getDay() === 6 ? 'text-blue-500' : 'text-slate-800'}`}>
-                              {dObj.getDate()}日 ({dayOfWeek})
+                              {dObj.getDate()}({dayOfWeek})
                             </span>
                           </div>
 
-                          <div className="flex items-center gap-1.5 flex-1 justify-end">
+                          {/* 時間入力とお休みボタンを隙間なく配置 */}
+                          <div className="flex items-center gap-1 flex-1 justify-end">
                             <input 
                               type="time" 
                               value={row.start} 
-                              disabled={!row.enabled} 
                               onChange={(e) => {
                                 const next = { ...bulkEditRows };
                                 next[dateStr].start = e.target.value;
                                 setBulkEditRows(next);
                               }} 
-                              className="px-2 py-1 border rounded-xl text-[11px] font-bold disabled:opacity-30 bg-slate-50 text-center w-24" 
+                              className="px-1 py-1 border rounded-lg text-[10px] font-bold bg-white text-center w-20 shrink-0" 
                             />
-                            <span className="opacity-50 font-bold">〜</span>
+                            <span className="opacity-40 text-[10px] font-bold">〜</span>
                             <input 
                               type="time" 
                               value={row.end} 
-                              disabled={!row.enabled} 
                               onChange={(e) => {
                                 const next = { ...bulkEditRows };
                                 next[dateStr].end = e.target.value;
                                 setBulkEditRows(next);
                               }} 
-                              className="px-2 py-1 border rounded-xl text-[11px] font-bold disabled:opacity-30 bg-slate-50 text-center w-24" 
+                              className="px-1 py-1 border rounded-lg text-[10px] font-bold bg-white text-center w-20 shrink-0" 
                             />
+                            <button 
+                              type="button" 
+                              onClick={() => {
+                                const next = { ...bulkEditRows };
+                                next[dateStr].start = '';
+                                next[dateStr].end = '';
+                                setBulkEditRows(next);
+                              }}
+                              className="bg-amber-500/15 hover:bg-amber-500/25 text-amber-800 px-2 py-1 rounded-lg text-[10px] font-bold shrink-0 transition"
+                              title="お休み"
+                            >
+                              お休み
+                            </button>
                           </div>
                         </div>
                       );
                     })}
                   </div>
 
-                  <div className="flex justify-end gap-2 pt-2 border-t shrink-0">
-                    <button type="button" onClick={() => setIsBulkWorkModalOpen(false)} className="px-4 py-2 border rounded-xl text-xs font-bold">キャンセル</button>
-                    <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-xs">一括保存する</button>
+                  <div className="flex justify-end gap-2 pt-1.5 border-t shrink-0">
+                    <button type="button" onClick={() => setIsBulkWorkModalOpen(false)} className="px-3 py-1.5 border rounded-xl text-xs font-bold">キャンセル</button>
+                    <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold shadow-xs">一括保存する</button>
                   </div>
                 </form>
               </div>
@@ -1581,7 +1582,7 @@
                       <span className="font-bold text-slate-500">〜</span>
                       <input type="time" value={defaultWorkEnd} onChange={(e) => handleSaveDefaultWorkTemplate(defaultWorkStart, e.target.value)} className="flex-1 px-3 py-2 border rounded-xl text-xs font-bold text-center" />
                     </div>
-                    <p className="text-[10px] opacity-60 leading-relaxed">ここでの時間はテンプレとしての保持用です。個別に日付を開いて「保存」を押すまではカレンダー等には自動登録されません。</p>
+                    <p className="text-[10px] opacity-60 leading-relaxed">ここでの時間はテンプレとしての保持用です。一括表編集画面を開いた際の初期値として使用されます。</p>
                   </div>
                 )}
 
