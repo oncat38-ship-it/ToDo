@@ -185,13 +185,9 @@
       const [isTrashOpen, setIsTrashOpen] = useState(false);
       const [isEventModalOpen, setIsEventModalOpen] = useState(false);
       
+      // テーブル形式一括勤務時間設定モーダル用ステート
       const [isBulkWorkModalOpen, setIsBulkWorkModalOpen] = useState(false);
-      const [bulkTargetMode, setBulkTargetMode] = useState('month');
-      const [bulkStartInput, setBulkStartInput] = useState('09:00');
-      const [bulkEndInput, setBulkEndInput] = useState('18:00');
-      const [bulkStartDate, setBulkStartDate] = useState(new Date().toISOString().split('T')[0]);
-      const [bulkEndDate, setBulkEndDate] = useState(new Date().toISOString().split('T')[0]);
-      const [bulkApplyWeekdaysOnly, setBulkApplyWeekdaysOnly] = useState(true);
+      const [bulkEditRows, setBulkEditRows] = useState({}); // { '2026-05-01': { start: '09:00', end: '18:00', enabled: true }, ... }
 
       const [selectedDayDetailDate, setSelectedDayDetailDate] = useState(null);
       const [isEditingWorkHours, setIsEditingWorkHours] = useState(false);
@@ -429,54 +425,43 @@
         setIsEditingWorkHours(false);
       };
 
-      const handleSaveBulkWorkHours = (e) => {
+      // テーブル形式の一括保存処理
+      const handleSaveTableBulkWorkHours = (e) => {
         e.preventDefault();
         const nextHours = { ...workHours };
-        const targetYear = currentDate.getFullYear();
-        const targetMonth = currentDate.getMonth();
 
-        if (bulkTargetMode === 'month') {
-          const daysInMonth = new Date(targetYear, targetMonth + 1, 0).getDate();
-          for (let d = 1; d <= daysInMonth; d++) {
-            const dateObj = new Date(targetYear, targetMonth, d);
-            const dayOfWeek = dateObj.getDay();
-            const dateStr = `${targetYear}-${String(targetMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-
-            if (bulkApplyWeekdaysOnly) {
-              if (dayOfWeek !== 0 && dayOfWeek !== 6) {
-                nextHours[dateStr] = { start: bulkStartInput, end: bulkEndInput };
-              }
-            } else {
-              nextHours[dateStr] = { start: bulkStartInput, end: bulkEndInput };
-            }
+        Object.keys(bulkEditRows).forEach(dateStr => {
+          const row = bulkEditRows[dateStr];
+          if (row.enabled) {
+            nextHours[dateStr] = { start: row.start, end: row.end };
+          } else {
+            delete nextHours[dateStr];
           }
-        } else {
-          if (!bulkStartDate || !bulkEndDate) return;
-          let curr = new Date(bulkStartDate);
-          const endD = new Date(bulkEndDate);
-          if (curr > endD) return;
-
-          while (curr <= endD) {
-            const y = curr.getFullYear();
-            const m = curr.getMonth() + 1;
-            const d = curr.getDate();
-            const dateStr = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-            const dayOfWeek = curr.getDay();
-
-            if (bulkApplyWeekdaysOnly) {
-              if (dayOfWeek !== 0 && dayOfWeek !== 6) {
-                nextHours[dateStr] = { start: bulkStartInput, end: bulkEndInput };
-              }
-            } else {
-              nextHours[dateStr] = { start: bulkStartInput, end: bulkEndInput };
-            }
-            curr.setDate(curr.getDate() + 1);
-          }
-        }
+        });
 
         setWorkHours(nextHours);
         saveUserDataToFirebase({ workHours: nextHours });
         setIsBulkWorkModalOpen(false);
+      };
+
+      // テーブル一括モーダルを開くときに現在表示中月のデータを初期ロード
+      const openBulkWorkModal = () => {
+        const targetYear = currentDate.getFullYear();
+        const targetMonth = currentDate.getMonth();
+        const daysInMonth = new Date(targetYear, targetMonth + 1, 0).getDate();
+        const rows = {};
+
+        for (let d = 1; d <= daysInMonth; d++) {
+          const dateStr = `${targetYear}-${String(targetMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+          const existing = workHours[dateStr];
+          rows[dateStr] = {
+            enabled: !!existing,
+            start: existing ? existing.start : defaultWorkStart,
+            end: existing ? existing.end : defaultWorkEnd
+          };
+        }
+        setBulkEditRows(rows);
+        setIsBulkWorkModalOpen(true);
       };
 
       const handleSaveDefaultWorkTemplate = (start, end) => {
@@ -1167,10 +1152,11 @@
                   })}
                 </div>
 
+                {/* カレンダー下部スペースのボタン（表形式の一括編集を開く） */}
                 <div className="p-3 bg-slate-50 border-t shrink-0 flex items-center justify-between">
-                  <span className="text-[11px] font-bold text-slate-500">💡 勤務時間をまとめて登録できます</span>
-                  <button onClick={() => setIsBulkWorkModalOpen(true)} className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold shadow-xs transition hover-scale flex items-center gap-1">
-                    <span>💼 勤務時間を一括設定</span>
+                  <span className="text-[11px] font-bold text-slate-500">💡 月の仕事を一覧テーブルで編集できます</span>
+                  <button onClick={openBulkWorkModal} className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold shadow-xs transition hover-scale flex items-center gap-1">
+                    <span>💼 仕事時間を一括表編集</span>
                   </button>
                 </div>
               </div>
@@ -1263,52 +1249,78 @@
             );
           })()}
 
+          {/* 表形式の一括勤務時間設定モーダル */}
           {isBulkWorkModalOpen && (
             <div className="fixed inset-0 bg-slate-950/70 flex items-center justify-center p-3 z-50">
-              <div className="bg-white rounded-3xl w-full max-w-sm p-5 shadow-2xl border space-y-4 animate-modal">
-                <div className="flex justify-between items-center border-b pb-2">
-                  <h2 className="text-xs font-bold">💼 勤務時間を一括設定</h2>
+              <div className="bg-white rounded-3xl w-full max-w-lg p-5 shadow-2xl border space-y-4 animate-modal flex flex-col max-h-[90vh]">
+                <div className="flex justify-between items-center border-b pb-2 shrink-0">
+                  <h2 className="text-xs font-bold">💼 仕事時間の一括表編集 ({year}年{month + 1}月)</h2>
                   <button onClick={() => setIsBulkWorkModalOpen(false)} className="opacity-60 hover:opacity-100 p-1"><i data-lucide="x" className="w-4 h-4"></i></button>
                 </div>
 
-                <form onSubmit={handleSaveBulkWorkHours} className="space-y-3.5">
-                  <div>
-                    <label className="block text-[10px] opacity-60 font-bold mb-1">対象の範囲</label>
-                    <div className="flex bg-black/10 p-0.5 rounded-xl text-xs font-bold">
-                      <button type="button" onClick={() => setBulkTargetMode('month')} className={`flex-1 py-1.5 rounded-lg ${bulkTargetMode === 'month' ? 'bg-white shadow-xs' : 'opacity-60'}`}>表示中の月全体 ({year}年{month + 1}月)</button>
-                      <button type="button" onClick={() => setBulkTargetMode('range')} className={`flex-1 py-1.5 rounded-lg ${bulkTargetMode === 'range' ? 'bg-white shadow-xs' : 'opacity-60'}`}>期間を指定</button>
-                    </div>
+                <div className="text-[11px] opacity-70 shrink-0">
+                  各日付ごとに仕事時間を設定・調整できます。チェックを外すとその日の仕事時間は解除されます。
+                </div>
+
+                <form onSubmit={handleSaveTableBulkWorkHours} className="space-y-3 flex-1 flex flex-col min-h-0">
+                  <div className="flex-1 overflow-y-auto border rounded-2xl divide-y divide-slate-100 p-2 space-y-1">
+                    {Object.keys(bulkEditRows).sort().map(dateStr => {
+                      const row = bulkEditRows[dateStr];
+                      const dObj = new Date(dateStr);
+                      const dayOfWeek = ['日', '月', '火', '水', '木', '金', '土'][dObj.getDay()];
+                      const isWeekend = dObj.getDay() === 0 || dObj.getDay() === 6;
+
+                      return (
+                        <div key={dateStr} className={`flex items-center justify-between gap-2 p-1.5 rounded-xl ${isWeekend ? 'bg-slate-50' : 'bg-white'}`}>
+                          <div className="flex items-center gap-2 shrink-0 w-28">
+                            <input 
+                              type="checkbox" 
+                              checked={row.enabled} 
+                              onChange={(e) => {
+                                const next = { ...bulkEditRows };
+                                next[dateStr].enabled = e.target.checked;
+                                setBulkEditRows(next);
+                              }} 
+                              className="w-4 h-4 text-blue-600 rounded cursor-pointer" 
+                            />
+                            <span className={`text-[11px] font-bold ${dObj.getDay() === 0 ? 'text-rose-500' : dObj.getDay() === 6 ? 'text-blue-500' : 'text-slate-800'}`}>
+                              {dObj.getDate()}日 ({dayOfWeek})
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-1.5 flex-1 justify-end">
+                            <input 
+                              type="time" 
+                              value={row.start} 
+                              disabled={!row.enabled} 
+                              onChange={(e) => {
+                                const next = { ...bulkEditRows };
+                                next[dateStr].start = e.target.value;
+                                setBulkEditRows(next);
+                              }} 
+                              className="px-2 py-1 border rounded-xl text-[11px] font-bold disabled:opacity-30 bg-slate-50 text-center w-24" 
+                            />
+                            <span className="opacity-50 font-bold">〜</span>
+                            <input 
+                              type="time" 
+                              value={row.end} 
+                              disabled={!row.enabled} 
+                              onChange={(e) => {
+                                const next = { ...bulkEditRows };
+                                next[dateStr].end = e.target.value;
+                                setBulkEditRows(next);
+                              }} 
+                              className="px-2 py-1 border rounded-xl text-[11px] font-bold disabled:opacity-30 bg-slate-50 text-center w-24" 
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
 
-                  {bulkTargetMode === 'range' && (
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-1.5">
-                        <input type="date" value={bulkStartDate} onChange={(e) => setBulkStartDate(e.target.value)} className="w-full px-3 py-2 border rounded-xl text-xs font-bold" required />
-                        <span className="font-bold opacity-60">〜</span>
-                        <input type="date" value={bulkEndDate} onChange={(e) => setBulkEndDate(e.target.value)} className="w-full px-3 py-2 border rounded-xl text-xs font-bold" required />
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="space-y-1">
-                    <label className="block text-[10px] opacity-60 font-bold">仕事時間</label>
-                    <div className="flex items-center gap-2">
-                      <input type="time" value={bulkStartInput} onChange={(e) => setBulkStartInput(e.target.value)} className="flex-1 px-3 py-2 border rounded-xl text-xs font-bold text-center" required />
-                      <span className="font-bold text-slate-500">〜</span>
-                      <input type="time" value={bulkEndInput} onChange={(e) => setBulkEndInput(e.target.value)} className="flex-1 px-3 py-2 border rounded-xl text-xs font-bold text-center" required />
-                    </div>
-                  </div>
-
-                  <div className="bg-black/5 p-3 rounded-xl">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input type="checkbox" checked={bulkApplyWeekdaysOnly} onChange={(e) => setBulkApplyWeekdaysOnly(e.target.checked)} className="w-4 h-4 text-blue-600 rounded" />
-                      <span className="text-xs font-bold">土日を除外して平日のみ適用する</span>
-                    </label>
-                  </div>
-
-                  <div className="flex justify-end gap-2 pt-2 border-t">
+                  <div className="flex justify-end gap-2 pt-2 border-t shrink-0">
                     <button type="button" onClick={() => setIsBulkWorkModalOpen(false)} className="px-4 py-2 border rounded-xl text-xs font-bold">キャンセル</button>
-                    <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-xs">一括適用して保存</button>
+                    <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-xs">一括保存する</button>
                   </div>
                 </form>
               </div>
