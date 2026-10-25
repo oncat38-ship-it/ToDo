@@ -1247,10 +1247,10 @@
             );
           })()}
 
-          {/* スマホ対応：一画面に収まるコンパクトな一括勤務時間設定モーダル */}
+          {/* スマホ対応：日付と時間の隙間をなくし、「お休み」ボタンをすっきり収納した一括表編集モーダル */}
           {isBulkWorkModalOpen && (
             <div className="fixed inset-0 bg-slate-950/70 flex items-center justify-center p-2 z-50">
-              <div className="bg-white rounded-3xl w-full max-w-md p-4 shadow-2xl border space-y-3 animate-modal flex flex-col max-h-[92vh]">
+              <div className="bg-white rounded-3xl w-full max-w-md p-3.5 shadow-2xl border space-y-2.5 animate-modal flex flex-col max-h-[92vh]">
                 <div className="flex justify-between items-center border-b pb-2 shrink-0">
                   <h2 className="text-xs font-bold">💼 仕事時間の一括編集 ({year}年{month + 1}月)</h2>
                   <button onClick={() => setIsBulkWorkModalOpen(false)} className="opacity-60 hover:opacity-100 p-1"><i data-lucide="x" className="w-4 h-4"></i></button>
@@ -1260,8 +1260,8 @@
                   💡 テンプレが入力されています。「お休み」で空白にします。
                 </div>
 
-                <form onSubmit={handleSaveTableBulkWorkHours} className="space-y-3 flex-1 flex flex-col min-h-0">
-                  <div className="flex-1 overflow-y-auto border rounded-2xl divide-y divide-slate-100 p-1.5 space-y-1">
+                <form onSubmit={handleSaveTableBulkWorkHours} className="space-y-2.5 flex-1 flex flex-col min-h-0">
+                  <div className="flex-1 overflow-y-auto border rounded-2xl divide-y divide-slate-100 p-1 space-y-1">
                     {Object.keys(bulkEditRows).sort().map(dateStr => {
                       const row = bulkEditRows[dateStr];
                       const dObj = new Date(dateStr);
@@ -1269,14 +1269,16 @@
                       const isWeekend = dObj.getDay() === 0 || dObj.getDay() === 6;
 
                       return (
-                        <div key={dateStr} className={`flex items-center justify-between gap-1 p-1 rounded-xl ${isWeekend ? 'bg-slate-50' : 'bg-white'}`}>
-                          <div className="flex items-center shrink-0 w-16">
-                            <span className={`text-[10px] font-bold ${dObj.getDay() === 0 ? 'text-rose-500' : dObj.getDay() === 6 ? 'text-blue-500' : 'text-slate-800'}`}>
-                              {dObj.getDate()}日({dayOfWeek})
+                        <div key={dateStr} className={`flex items-center justify-between gap-1 px-2 py-1.5 rounded-xl ${isWeekend ? 'bg-slate-50' : 'bg-white'}`}>
+                          {/* 日付と曜日（隙間をなくすため幅を最小限に） */}
+                          <div className="flex items-center shrink-0 w-12">
+                            <span className={`text-[11px] font-bold ${dObj.getDay() === 0 ? 'text-rose-500' : dObj.getDay() === 6 ? 'text-blue-500' : 'text-slate-800'}`}>
+                              {dObj.getDate()}({dayOfWeek})
                             </span>
                           </div>
 
-                          <div className="flex items-center gap-1 flex-1 justify-end min-w-0">
+                          {/* 時間入力とお休みボタンを隙間なく配置 */}
+                          <div className="flex items-center gap-1 flex-1 justify-end">
                             <input 
                               type="time" 
                               value={row.start} 
@@ -1287,7 +1289,7 @@
                               }} 
                               className="px-1 py-1 border rounded-lg text-[10px] font-bold bg-white text-center w-20 shrink-0" 
                             />
-                            <span className="opacity-50 text-[10px] font-bold">〜</span>
+                            <span className="opacity-40 text-[10px] font-bold">〜</span>
                             <input 
                               type="time" 
                               value={row.end} 
@@ -1306,10 +1308,10 @@
                                 next[dateStr].end = '';
                                 setBulkEditRows(next);
                               }}
-                              className="bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 px-1.5 py-1 rounded-lg text-[9px] font-bold shrink-0 transition"
+                              className="bg-amber-500/15 hover:bg-amber-500/25 text-amber-800 px-2 py-1 rounded-lg text-[10px] font-bold shrink-0 transition"
                               title="お休み"
                             >
-                              休み
+                              お休み
                             </button>
                           </div>
                         </div>
@@ -1317,7 +1319,7 @@
                     })}
                   </div>
 
-                  <div className="flex justify-end gap-2 pt-2 border-t shrink-0">
+                  <div className="flex justify-end gap-2 pt-1.5 border-t shrink-0">
                     <button type="button" onClick={() => setIsBulkWorkModalOpen(false)} className="px-3 py-1.5 border rounded-xl text-xs font-bold">キャンセル</button>
                     <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold shadow-xs">一括保存する</button>
                   </div>
