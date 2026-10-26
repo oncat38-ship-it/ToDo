@@ -337,7 +337,7 @@
         } catch (err) {
           setAuthError('IDまたはパスワードが正しくありません。');
         }
-      };
+  };
 
       const handleUpdatePassword = async (e) => {
         e.preventDefault();
@@ -373,7 +373,7 @@
         }
       };
 
-      // 仕事時間の一括保存（未定・休みのステータスをそのままDB保存）
+      // 仕事時間の一括保存（未定や休みはカレンダー非表示、一括登録画面のみ記録維持）
       const handleSaveTableBulkWorkHours = (e) => {
         e.preventDefault();
         const nextHours = { ...workHours };
@@ -786,12 +786,12 @@
 
                   {viewingWorkHours ? (
                     viewingWorkHours.type === 'unfixed' ? (
-                      <div className="bg-slate-100 border border-slate-200 rounded-lg px-2.5 py-1 flex items-center justify-between text-slate-600 font-bold text-[11px]">
-                        <span>💼 仕事時間: 未定</span>
+                      <div className="bg-slate-100 border border-slate-200 rounded-lg px-2.5 py-1 flex items-center justify-between text-slate-500 font-bold text-[11px]">
+                        <span>💼 仕事時間: 未設定</span>
                       </div>
                     ) : viewingWorkHours.type === 'off' ? (
-                      <div className="bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1 flex items-center justify-between text-amber-800 font-bold text-[11px]">
-                        <span>💼 仕事時間: 休み ☕</span>
+                      <div className="bg-slate-100 border border-slate-200 rounded-lg px-2.5 py-1 flex items-center justify-between text-slate-500 font-bold text-[11px]">
+                        <span>💼 仕事時間: 未設定</span>
                       </div>
                     ) : (
                       <div className="bg-blue-500/10 border border-blue-500/35 rounded-lg px-2.5 py-1 flex items-center justify-between text-blue-700 font-bold text-[11px]">
@@ -994,14 +994,8 @@
                         </div>
 
                         <div className="space-y-0.5 overflow-hidden flex-1 mt-0.5">
-                          {dayWork && (
-                            dayWork.type === 'unfixed' ? (
-                              <div className="text-[8px] bg-slate-200 text-slate-700 font-bold px-1 rounded truncate">💼 未定</div>
-                            ) : dayWork.type === 'off' ? (
-                              <div className="text-[8px] bg-amber-100 text-amber-800 font-bold px-1 rounded truncate">☕ 休み</div>
-                            ) : (
-                              <div className="text-[8px] bg-blue-100 text-blue-800 font-bold px-1 rounded truncate">💼 {dayWork.start}-{dayWork.end}</div>
-                            )
+                          {dayWork && dayWork.type === 'time' && (
+                            <div className="text-[8px] bg-blue-100 text-blue-800 font-bold px-1 rounded truncate">💼 {dayWork.start}-{dayWork.end}</div>
                           )}
                           {dayEvs.map(ev => <div key={ev.id} className="text-[9px] px-1 bg-purple-100 text-purple-800 rounded font-bold truncate">{ev.icon} {ev.title}</div>)}
                           {dayTodos.map(todo => (
@@ -1025,7 +1019,7 @@
             </div>
           )}
 
-          {/* 一括勤務時間編集モーダル（未定・休みボタンの選択状態表示＆保存完全対応） */}
+          {/* 一括勤務時間編集モーダル（未定・休みはカレンダー非表示＆一括登録画面のみ状態維持） */}
           {isBulkWorkModalOpen && (
             <div className="fixed inset-0 bg-slate-950/70 flex items-center justify-center p-2 z-50">
               <div className="bg-white rounded-3xl w-full max-w-md p-3.5 shadow-2xl border space-y-2.5 animate-modal flex flex-col max-h-[92vh]">
@@ -1035,7 +1029,7 @@
                 </div>
 
                 <div className="text-[10px] opacity-70 shrink-0">
-                  💡 「未定」や「休み」を押すと色が変わり、その状態が次回も引き継がれます。
+                  💡 「未定」や「休み」を選んだ日はカレンダーに何も表示されず、一括登録画面だけに選択状態が記録されます。
                 </div>
 
                 <form onSubmit={handleSaveTableBulkWorkHours} className="space-y-2.5 flex-1 flex flex-col min-h-0">
@@ -1059,7 +1053,7 @@
                             </span>
                           </div>
 
-                          {/* 時間入力＆「未定」「休み」切り替えボタン */}
+                          {/* 時間入力＆「未定」「休み」ボタン */}
                           <div className="flex items-center gap-0.5 flex-1 justify-end">
                             <input 
                               type="time" 
