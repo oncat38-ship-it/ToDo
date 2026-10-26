@@ -373,18 +373,18 @@
         }
       };
 
-      // 仕事時間の一括保存（既存の登録内容が次回も保持される）
+      // 仕事時間の一括保存（未定や休日の空欄も正しく保持・反映）
       const handleSaveTableBulkWorkHours = (e) => {
         e.preventDefault();
         const nextHours = { ...workHours };
         Object.keys(bulkEditRows).forEach(dateStr => {
           const row = bulkEditRows[dateStr];
-          const startVal = row.start.trim();
-          const endVal = row.end.trim();
+          const startVal = row.start ? row.start.trim() : '';
+          const endVal = row.end ? row.end.trim() : '';
           if (startVal && endVal) {
             nextHours[dateStr] = { start: startVal, end: endVal };
           } else {
-            delete nextHours[dateStr]; // 未定や休日の場合は保存データを削除してクリア
+            delete nextHours[dateStr]; // 未定や休日の場合は保存データを削除して確実に空白にする
           }
         });
         setWorkHours(nextHours);
@@ -400,10 +400,10 @@
         for (let d = 1; d <= daysInMonth; d++) {
           const dateStr = `${targetYear}-${String(targetMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
           const existing = workHours[dateStr];
-          // 既に登録されているデータがあればそれを優先して読み込む
+          // 既に登録されていればその値、未定・休み等で削除されていたら空欄（""）として引き継ぐ
           rows[dateStr] = {
-            start: existing ? existing.start : defaultWorkStart,
-            end: existing ? existing.end : defaultWorkEnd
+            start: existing ? existing.start : '',
+            end: existing ? existing.end : ''
           };
         }
         setBulkEditRows(rows);
@@ -992,7 +992,7 @@
             </div>
           )}
 
-          {/* 一括勤務時間編集モーダル：隙間を極限まで詰め、「未定」「休み」をスマートに配置 */}
+          {/* 一括勤務時間編集モーダル（未定・休みの状態を確実に引き継ぎ） */}
           {isBulkWorkModalOpen && (
             <div className="fixed inset-0 bg-slate-950/70 flex items-center justify-center p-2 z-50">
               <div className="bg-white rounded-3xl w-full max-w-md p-3.5 shadow-2xl border space-y-2.5 animate-modal flex flex-col max-h-[92vh]">
@@ -1002,7 +1002,7 @@
                 </div>
 
                 <div className="text-[10px] opacity-70 shrink-0">
-                  💡 「未定」や「休み」を押すと空欄になります。保存した内容は次回も引き継がれます。
+                  💡 「未定」や「休み」で空欄にした内容は、次回開いたときも空欄のまま保持されます。
                 </div>
 
                 <form onSubmit={handleSaveTableBulkWorkHours} className="space-y-2.5 flex-1 flex flex-col min-h-0">
@@ -1015,14 +1015,14 @@
 
                       return (
                         <div key={dateStr} className={`flex items-center justify-between gap-1 px-2 py-1 rounded-xl ${isWeekend ? 'bg-slate-50' : 'bg-white'}`}>
-                          {/* 日付（幅をコンパクトに固定） */}
+                          {/* 日付 */}
                           <div className="flex items-center shrink-0 w-10">
                             <span className={`text-[11px] font-bold ${dObj.getDay() === 0 ? 'text-rose-500' : dObj.getDay() === 6 ? 'text-blue-500' : 'text-slate-800'}`}>
                               {dObj.getDate()}({dayOfWeek})
                             </span>
                           </div>
 
-                          {/* 時間入力と「未定」「休み」ボタンをぎゅっと配置 */}
+                          {/* 時間入力と「未定」「休み」ボタン */}
                           <div className="flex items-center gap-0.5 flex-1 justify-end">
                             <input 
                               type="time" 
