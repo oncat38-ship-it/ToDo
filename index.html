@@ -142,6 +142,7 @@
       const [authError, setAuthError] = useState('');
 
       const [activeTab, setActiveTab] = useState('today');
+      const [isShoppingPanelOpen, setIsShoppingPanelOpen] = useState(false);
       const [theme, setTheme] = useState('simple');
 
       const realTodayObj = new Date();
@@ -657,6 +658,7 @@
       const viewingTodos = currentListTodos.filter(t => t.date === viewingDateStr);
       const viewingEvents = currentListEvents.filter(e => e.date === viewingDateStr);
       const viewingShoppings = currentListShoppings.filter(s => !s.date || s.date === viewingDateStr);
+      const undatedShoppings = currentListShoppings.filter(s => !s.date);
       const viewingMemos = memos.filter(m => !m.date || m.date === viewingDateStr);
       const viewingWorkHours = workHours[viewingDateStr];
 
@@ -743,7 +745,6 @@
             <div className="flex items-center gap-2 shrink-0">
               <button onClick={() => openModal('todo')} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 ${themeStyles.primaryBtn}`}>＋やること</button>
               <button onClick={() => openModal('event')} className="px-3 py-1.5 rounded-lg font-bold text-xs text-purple-700 bg-purple-100 hover:bg-purple-200 transition border border-purple-200 hover-scale">＋イベント</button>
-              <button onClick={() => openModal('shopping')} className="px-3 py-1.5 rounded-lg font-bold text-xs text-emerald-700 bg-emerald-100 hover:bg-emerald-200 transition border border-emerald-200 hover-scale">＋買い物</button>
               <button onClick={() => window.firebaseApp.signOut(window.firebaseApp.auth)} className="opacity-60 hover:opacity-100 p-1 transition ml-1 hover-scale"><i data-lucide="log-out" className="w-4 h-4"></i></button>
             </div>
           </header>
@@ -753,27 +754,56 @@
             <button onClick={() => setActiveTab('memos')} className={`px-3 py-1 font-bold text-xs whitespace-nowrap transition hover-scale ${activeTab === 'memos' ? themeStyles.activeTabBg : 'opacity-70 hover:opacity-100 hover:bg-black/5 rounded-lg'}`}>📌 メモ</button>
           </div>
 
+          {/* 左下固定：日付未定の買い物リスト。日付指定分は各日のページに表示 */}
+          <div className="fixed left-3 bottom-4 sm:left-5 sm:bottom-5 z-40 w-[min(300px,calc(100vw-24px))]">
+            {isShoppingPanelOpen && (
+              <div className="mb-2 rounded-xl border border-emerald-200 bg-white shadow-xl overflow-hidden">
+                <div className="flex items-center justify-between gap-2 px-2.5 py-2 bg-emerald-50 border-b border-emerald-100">
+                  <div className="font-extrabold text-xs text-emerald-950">🛒 日付未定の買い物</div>
+                  <button onClick={() => openModal('shopping')} className="bg-emerald-600 text-white px-2 py-1 rounded-lg text-[10px] font-bold shrink-0">＋追加</button>
+                </div>
+                <div className="max-h-[45vh] overflow-y-auto p-1.5 space-y-1">
+                  {undatedShoppings.length === 0 ? (
+                    <div className="text-center text-slate-400 text-[10px] py-4">日付未定の買い物はありません</div>
+                  ) : undatedShoppings.map(shop => (
+                    <div key={shop.id} className={`border rounded-lg px-2 py-1 flex items-center gap-1.5 ${shop.completed ? 'bg-slate-50 opacity-50' : 'bg-white border-emerald-100'}`}>
+                      <input type="checkbox" checked={!!shop.completed} onChange={() => toggleShoppingComplete(shop.id)} className="w-3.5 h-3.5 text-emerald-600 rounded cursor-pointer shrink-0" />
+                      <div className="flex-1 min-w-0"><div className={`font-bold text-[11px] leading-4 break-words ${shop.completed ? 'line-through' : ''}`}>{shop.name}</div>{shop.detail && <div className="text-[9px] text-slate-400 truncate">{shop.detail}</div>}</div>
+                      <button onClick={() => openModal('shopping', shop)} className="text-slate-400 p-0.5" aria-label="買い物を編集"><i data-lucide="edit-3" className="w-3 h-3"></i></button>
+                      <button onClick={() => deleteShopping(shop.id)} className="text-rose-500 p-0.5" aria-label="買い物を削除"><i data-lucide="trash-2" className="w-3 h-3"></i></button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            <button onClick={() => setIsShoppingPanelOpen(v => !v)} aria-expanded={isShoppingPanelOpen} className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 shadow-lg font-bold text-xs transition active:scale-95">
+              <span className="text-base">🛒</span><span>買い物</span><span className="rounded-full bg-white/20 px-1.5 py-0.5 text-[10px]">{undatedShoppings.filter(s => !s.completed).length}</span><span className="text-[10px]">{isShoppingPanelOpen ? '▼閉じる' : '▲開く'}</span>
+            </button>
+          </div>
+
           <main className="flex-1 max-w-2xl w-full mx-auto p-3 space-y-3">
             {activeTab === 'today' && (
               <div className="space-y-3 animate-modal">
-                <div className="bg-slate-900 text-white rounded-2xl p-2.5 flex items-center justify-between shadow-md">
-                  <button onClick={handlePrevDay} className="px-3 py-1 bg-white/10 hover:bg-white/20 rounded-xl text-xs font-bold transition">◀ 前日</button>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-extrabold">{formattedViewingDate}</span>
-                    {!isViewingToday && (
-                      <button onClick={() => setViewingDateStr(realTodayStr)} className="bg-blue-600 hover:bg-blue-500 text-white px-2 py-0.5 rounded-lg text-[10px] font-bold shadow-xs transition">
-                        本日へ
-                      </button>
-                    )}
+                <div className="bg-slate-900 text-white rounded-2xl px-3 py-4 sm:px-5 shadow-lg">
+                  <div className="flex items-center justify-between gap-2">
+                    <button onClick={handlePrevDay} className="shrink-0 px-3 py-2 bg-white/10 hover:bg-white/20 rounded-xl text-xs font-bold transition">◀ 前日</button>
+                    <div className="text-center flex-1 min-w-0">
+                      <div className="text-[10px] uppercase tracking-[0.25em] text-white/60 font-bold">{isViewingToday ? 'TODAY' : 'SCHEDULE'}</div>
+                      <div className="text-2xl sm:text-3xl font-black tracking-tight mt-1">{viewingDateObj.getMonth() + 1}月{viewingDateObj.getDate()}日</div>
+                      <div className="text-sm font-bold text-white/80 mt-0.5">{['日曜日','月曜日','火曜日','水曜日','木曜日','金曜日','土曜日'][viewingDateObj.getDay()]}</div>
+                      {!isViewingToday && (
+                        <button onClick={() => setViewingDateStr(realTodayStr)} className="mt-2 bg-blue-600 hover:bg-blue-500 text-white px-3 py-1 rounded-lg text-[10px] font-bold shadow-xs transition">本日へ戻る</button>
+                      )}
+                    </div>
+                    <button onClick={handleNextDay} className="shrink-0 px-3 py-2 bg-white/10 hover:bg-white/20 rounded-xl text-xs font-bold transition">翌日 ▶</button>
                   </div>
-                  <button onClick={handleNextDay} className="px-3 py-1 bg-white/10 hover:bg-white/20 rounded-xl text-xs font-bold transition">翌日 ▶</button>
                 </div>
 
-                <div className={`p-2.5 ${themeStyles.cardBg} space-y-2`}>
-                  <div className="flex items-center justify-between">
+                <div className={`p-3 sm:p-4 ${themeStyles.cardBg} space-y-3`}>
+                  <div className="flex items-center justify-between gap-2">
                     <div>
-                      <span className={`text-[9px] uppercase tracking-widest ${themeStyles.accentText}`}>SCHEDULE VIEW</span>
-                      <div className="text-sm font-black mt-0.5">{formattedViewingDate} {isViewingToday && '🌟(本日)'}</div>
+                      <span className={`text-[9px] uppercase tracking-widest ${themeStyles.accentText}`}>TODAY'S OVERVIEW</span>
+                      <div className="text-sm font-black mt-0.5">{formattedViewingDate} {isViewingToday && '🌟 本日'}</div>
                     </div>
                     <div className="flex items-center gap-2 bg-black/5 px-2.5 py-1 rounded-xl border border-black/5">
                       <span className="text-base">{weather.icon}</span>
@@ -804,73 +834,75 @@
                     </div>
                   )}
 
-                  {(viewingEvents.length > 0 || isViewingPayday) && (
-                    <div className="pt-1.5 border-t border-black/5 flex flex-wrap gap-1">
-                      {isViewingPayday && <span className="bg-emerald-500/20 text-emerald-700 font-extrabold text-[9px] px-2 py-0.5 rounded-lg">💰 給料日</span>}
-                      {viewingEvents.map(ev => (
-                        <span key={ev.id} className="bg-purple-500/20 text-purple-700 font-bold text-[9px] px-2 py-0.5 rounded-lg">
-                          {ev.icon} {ev.title} {ev.who ? `(${ev.who})` : ''}
-                        </span>
-                      ))}
+                  <div className="pt-3 border-t border-black/10 space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="font-extrabold text-sm text-purple-900 flex items-center gap-1.5">🎉 この日のイベント <span className="text-[10px] bg-purple-100 text-purple-800 px-2 py-0.5 rounded-full">{viewingEvents.length}件</span></div>
+                      <button onClick={() => openModal('event')} className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1.5 rounded-lg text-[11px] font-bold shrink-0">＋ イベント追加</button>
                     </div>
-                  )}
-                </div>
-
-                {/* 1. その日のイベント */}
-                <div className="bg-white border border-slate-200/80 rounded-xl p-3 space-y-2 shadow-2xs">
-                  <div className="flex items-center justify-between border-b pb-1.5">
-                    <span className="font-extrabold text-xs text-purple-900 flex items-center gap-1">🎉 その日のイベント ({viewingEvents.length})</span>
-                    <button onClick={() => openModal('event')} className="bg-purple-600 hover:bg-purple-700 text-white px-2 py-0.5 rounded-lg text-[10px] font-bold">＋ 追加</button>
-                  </div>
-                  {viewingEvents.length === 0 ? (
-                    <div className="text-center opacity-40 py-2 text-[11px]">イベントはありません</div>
-                  ) : (
-                    <div className="space-y-1.5">
-                      {viewingEvents.map(ev => (
-                        <div key={ev.id} className="bg-purple-500/10 border border-purple-200 rounded-xl px-2.5 py-1.5 flex items-center justify-between text-xs">
-                          <div className="flex items-center gap-2">
-                            <span className="text-base">{ev.icon}</span>
-                            <div>
-                              <span className="font-bold">{ev.title}</span>
-                              {ev.who && <span className="text-[10px] opacity-70 ml-1.5">({ev.who})</span>}
+                    {isViewingPayday && <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl px-3 py-2 font-extrabold text-sm">💰 今日は給料日</div>}
+                    {viewingEvents.length === 0 ? (
+                      <div className="text-center bg-slate-50 rounded-xl border border-dashed border-slate-200 py-4 text-xs text-slate-400">予定されているイベントはありません</div>
+                    ) : (
+                      <div className="space-y-2">
+                        {viewingEvents.map(ev => (
+                          <div key={ev.id} className="bg-purple-50 border border-purple-200 rounded-xl px-3 py-3 flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <span className="text-2xl shrink-0">{ev.icon}</span>
+                              <div className="min-w-0">
+                                <div className="font-extrabold text-sm text-purple-950 break-words">{ev.title}</div>
+                                {ev.who && <div className="text-[11px] text-purple-800/70 mt-0.5">{ev.who}</div>}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button onClick={() => openModal('event', ev)} className="text-purple-700 hover:bg-purple-100 rounded-lg p-2" aria-label="イベントを編集"><i data-lucide="edit-3" className="w-4 h-4"></i></button>
+                              <button onClick={() => deleteEvent(ev.id)} className="text-rose-500 hover:bg-rose-50 rounded-lg p-2" aria-label="イベントを削除"><i data-lucide="trash-2" className="w-4 h-4"></i></button>
                             </div>
                           </div>
-                          <div className="flex items-center gap-1">
-                            <button onClick={() => openModal('event', ev)} className="opacity-50 hover:opacity-100 p-1"><i data-lucide="edit-3" className="w-3.5 h-3.5"></i></button>
-                            <button onClick={() => deleteEvent(ev.id)} className="text-rose-500 p-1"><i data-lucide="trash-2" className="w-3.5 h-3.5"></i></button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
-                {/* 2. やることリスト */}
-                <div className="bg-white border border-slate-200/80 rounded-xl p-3 space-y-2 shadow-2xs">
-                  <div className="flex items-center justify-between border-b pb-1.5">
-                    <span className="font-extrabold text-xs text-slate-900 flex items-center gap-1">📝 やることリスト ({viewingTodos.length})</span>
-                    <button onClick={() => openModal('todo')} className="bg-slate-900 hover:bg-slate-800 text-white px-2 py-0.5 rounded-lg text-[10px] font-bold">＋ 追加</button>
+                {/* 2. やることリスト：時間順タイムライン */}
+                <div className="bg-white border border-slate-200/80 rounded-2xl p-3.5 space-y-3 shadow-sm">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                    <div>
+                      <span className="font-extrabold text-sm text-slate-900 flex items-center gap-1.5">📝 今日のタイムライン</span>
+                      <div className="text-[10px] text-slate-400 mt-0.5">時間指定のある予定から順番に表示します</div>
+                    </div>
+                    <button onClick={() => openModal('todo')} className="bg-slate-900 hover:bg-slate-800 text-white px-3 py-1.5 rounded-lg text-[11px] font-bold">＋ 追加</button>
                   </div>
                   {viewingTodos.length === 0 ? (
-                    <div className="text-center opacity-40 py-2 text-[11px]">やることリストはありません</div>
+                    <div className="text-center text-slate-400 py-5 text-xs">やることはありません</div>
                   ) : (
-                    <div className="space-y-1.5">
-                      {viewingTodos.map(todo => (
-                        <div key={todo.id} className={`border rounded-xl px-2.5 py-1.5 flex items-center justify-between gap-2 text-xs ${todo.completed ? 'bg-slate-50 opacity-40' : 'bg-white'}`}>
-                          <div className="flex items-center gap-2 flex-1 min-w-0">
-                            <input type="checkbox" checked={todo.completed} onChange={() => toggleTodoComplete(todo.id)} className="w-4 h-4 text-blue-600 rounded cursor-pointer shrink-0" />
-                            <span className="text-base shrink-0">{todo.icon}</span>
-                            <div className="flex-1 min-w-0">
-                              <div className={`font-bold truncate ${todo.completed ? 'line-through' : ''}`}>{todo.title}</div>
-                              <div className="flex items-center gap-2 text-[10px] opacity-60">
-                                {todo.hasTime && <span>⏰ {todo.time}</span>}
-                                {todo.detail && <span className="truncate">備考: {todo.detail}</span>}
+                    <div className="relative pl-1">
+                      <div className="absolute left-[53px] top-2 bottom-2 w-px bg-slate-200"></div>
+                      {[...viewingTodos].sort((a, b) => {
+                        const at = a.hasTime && a.time ? a.time : '99:99';
+                        const bt = b.hasTime && b.time ? b.time : '99:99';
+                        return at.localeCompare(bt);
+                      }).map((todo, index) => (
+                        <div key={todo.id} className={`relative grid grid-cols-[42px_14px_minmax(0,1fr)] gap-2 items-start py-2 ${todo.completed ? 'opacity-50' : ''}`}>
+                          <div className={`text-[11px] font-extrabold text-right pt-2 ${todo.hasTime && todo.time ? 'text-blue-700' : 'text-slate-400'}`}>
+                            {todo.hasTime && todo.time ? todo.time : 'あとで'}
+                          </div>
+                          <div className="relative flex justify-center pt-2.5 z-10">
+                            <span className={`w-2.5 h-2.5 rounded-full border-2 ${todo.hasTime && todo.time ? 'bg-blue-500 border-blue-500' : 'bg-white border-slate-300'}`}></span>
+                          </div>
+                          <div className={`min-w-0 rounded-xl border px-3 py-2.5 ${todo.completed ? 'bg-slate-50 border-slate-200' : todo.hasTime && todo.time ? 'bg-blue-50/70 border-blue-100' : 'bg-slate-50 border-slate-200'}`}>
+                            <div className="flex items-start gap-2">
+                              <input type="checkbox" checked={!!todo.completed} onChange={() => toggleTodoComplete(todo.id)} className="w-4 h-4 mt-0.5 text-blue-600 rounded cursor-pointer shrink-0" />
+                              <span className="text-lg leading-5 shrink-0">{todo.icon}</span>
+                              <div className="flex-1 min-w-0">
+                                <div className={`text-xs font-bold break-words ${todo.completed ? 'line-through text-slate-400' : 'text-slate-800'}`}>{todo.title}</div>
+                                {todo.detail && <div className="text-[10px] text-slate-500 mt-1 whitespace-pre-wrap break-words">{todo.detail}</div>}
+                              </div>
+                              <div className="flex items-center gap-1 shrink-0">
+                                <button onClick={() => openModal('todo', todo)} className="text-slate-400 hover:text-slate-700 p-1" aria-label="やることを編集"><i data-lucide="edit-3" className="w-3.5 h-3.5"></i></button>
+                                <button onClick={() => deleteTodo(todo.id)} className="text-rose-500 p-1" aria-label="やることを削除"><i data-lucide="trash-2" className="w-3.5 h-3.5"></i></button>
                               </div>
                             </div>
-                          </div>
-                          <div className="flex items-center gap-1 shrink-0">
-                            <button onClick={() => openModal('todo', todo)} className="opacity-50 hover:opacity-100 p-1"><i data-lucide="edit-3" className="w-3.5 h-3.5"></i></button>
-                            <button onClick={() => deleteTodo(todo.id)} className="text-rose-500 p-1"><i data-lucide="trash-2" className="w-3.5 h-3.5"></i></button>
                           </div>
                         </div>
                       ))}
@@ -878,36 +910,23 @@
                   )}
                 </div>
 
-                {/* 3. 買い物リスト */}
-                <div className="bg-white border border-slate-200/80 rounded-xl p-3 space-y-2 shadow-2xs">
-                  <div className="flex items-center justify-between border-b pb-1.5">
-                    <span className="font-extrabold text-xs text-emerald-900 flex items-center gap-1">🛒 買い物リスト ({viewingShoppings.length})</span>
-                    <button onClick={() => openModal('shopping')} className="bg-emerald-600 hover:bg-emerald-700 text-white px-2 py-0.5 rounded-lg text-[10px] font-bold">＋ 追加</button>
+                {/* 日付を指定した買い物は、その日のページ内にコンパクト表示 */}
+                <div className="bg-white border border-emerald-100 rounded-xl p-2.5 space-y-1.5 shadow-sm">
+                  <div className="flex items-center justify-between border-b border-emerald-50 pb-1.5">
+                    <span className="font-extrabold text-xs text-emerald-900">🛍️ この日の買い物 <span className="text-[10px] font-normal text-emerald-700">({currentListShoppings.filter(s => s.date === viewingDateStr).length})</span></span>
+                    <button onClick={() => { setShopDate(viewingDateStr); openModal('shopping'); }} className="bg-emerald-600 text-white px-2 py-1 rounded-lg text-[10px] font-bold">＋追加</button>
                   </div>
-                  {viewingShoppings.length === 0 ? (
-                    <div className="text-center opacity-40 py-2 text-[11px]">買い物リストはありません</div>
-                  ) : (
-                    <div className="space-y-1.5">
-                      {viewingShoppings.map(shop => (
-                        <div key={shop.id} className={`border rounded-xl px-2.5 py-1.5 flex items-center justify-between gap-2 text-xs ${shop.completed ? 'bg-slate-50 opacity-40' : 'bg-white'}`}>
-                          <div className="flex items-center gap-2 flex-1 min-w-0">
-                            <input type="checkbox" checked={shop.completed} onChange={() => toggleShoppingComplete(shop.id)} className="w-4 h-4 text-emerald-600 rounded cursor-pointer shrink-0" />
-                            <div className="flex-1 min-w-0">
-                              <div className={`font-bold truncate ${shop.completed ? 'line-through' : ''}`}>{shop.name}</div>
-                              <div className="flex items-center gap-2 text-[10px] opacity-60">
-                                {shop.date ? <span>📅 {shop.date}</span> : <span className="text-emerald-700 font-bold">日付未定</span>}
-                                {shop.detail && <span className="truncate">備考: {shop.detail}</span>}
-                              </div>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-1 shrink-0">
-                            <button onClick={() => openModal('shopping', shop)} className="opacity-50 hover:opacity-100 p-1"><i data-lucide="edit-3" className="w-3.5 h-3.5"></i></button>
-                            <button onClick={() => deleteShopping(shop.id)} className="text-rose-500 p-1"><i data-lucide="trash-2" className="w-3.5 h-3.5"></i></button>
-                          </div>
-                        </div>
-                      ))}
+                  {currentListShoppings.filter(s => s.date === viewingDateStr).length === 0 ? (
+                    <div className="text-center text-slate-400 text-[10px] py-2">この日に予定された買い物はありません</div>
+                  ) : currentListShoppings.filter(s => s.date === viewingDateStr).map(shop => (
+                    <div key={shop.id} className={`flex items-center gap-1.5 border-b border-slate-100 last:border-0 py-1 ${shop.completed ? 'opacity-50' : ''}`}>
+                      <input type="checkbox" checked={!!shop.completed} onChange={() => toggleShoppingComplete(shop.id)} className="w-3.5 h-3.5 text-emerald-600 rounded cursor-pointer shrink-0" />
+                      <span className={`flex-1 min-w-0 text-[11px] font-semibold break-words ${shop.completed ? 'line-through text-slate-400' : 'text-slate-700'}`}>{shop.name}</span>
+                      {shop.detail && <span className="max-w-[25%] truncate text-[9px] text-slate-400">{shop.detail}</span>}
+                      <button onClick={() => openModal('shopping', shop)} className="text-slate-400 p-0.5" aria-label="買い物を編集"><i data-lucide="edit-3" className="w-3 h-3"></i></button>
+                      <button onClick={() => deleteShopping(shop.id)} className="text-rose-500 p-0.5" aria-label="買い物を削除"><i data-lucide="trash-2" className="w-3 h-3"></i></button>
                     </div>
-                  )}
+                  ))}
                 </div>
 
               </div>
@@ -942,13 +961,15 @@
             )}
           </main>
 
-          <button onClick={() => setIsCalendarOpen(true)} className={`fixed bottom-6 right-6 p-4 z-40 flex items-center justify-center ${themeStyles.floatingCal}`} title="カレンダー">
-            <i data-lucide="calendar" className="w-6 h-6"></i>
-          </button>
-
-          <button onClick={() => setIsSettingsOpen(true)} className={`fixed bottom-6 left-6 p-3.5 z-40 flex items-center justify-center ${themeStyles.floatingSet}`} title="設定">
-            <i data-lucide="settings" className="w-5 h-5"></i>
-          </button>
+          {/* 右下に設定・カレンダーをまとめて配置 */}
+          <div className="fixed bottom-4 right-3 sm:bottom-5 sm:right-5 z-40 flex items-center gap-1.5">
+            <button onClick={() => setIsSettingsOpen(true)} className={`p-2.5 flex items-center justify-center ${themeStyles.floatingSet}`} title="設定" aria-label="設定">
+              <i data-lucide="settings" className="w-4 h-4"></i>
+            </button>
+            <button onClick={() => setIsCalendarOpen(true)} className={`p-2.5 flex items-center justify-center ${themeStyles.floatingCal}`} title="カレンダー" aria-label="カレンダー">
+              <i data-lucide="calendar" className="w-5 h-5"></i>
+            </button>
+          </div>
 
           {/* カレンダーモーダル */}
           {isCalendarOpen && (
