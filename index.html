@@ -83,6 +83,7 @@
     ];
 
     const ICON_PRESETS = ['💼', '🏠', '🛒', '📚', '🏃', '🏥', '🎉', '🎂', '🎊', '🚗', '⭐', '💡', '🔥', '🐾'];
+    const EVENT_ICON_PRESETS = ['🎉', '🎂', '🎊', '🎁', '🥂', '✈️', '🚗', '⭐', '🎈'];
 
     function isJapaneseHoliday(year, month, day) {
       const dateStr = `${month}/${day}`;
@@ -142,6 +143,8 @@
       const [authError, setAuthError] = useState('');
 
       const [activeTab, setActiveTab] = useState('today');
+      const [eventCalendarMonth, setEventCalendarMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
+      const [selectedEventCalendarDate, setSelectedEventCalendarDate] = useState(() => new Date().toISOString().split('T')[0]);
       const [isShoppingPanelOpen, setIsShoppingPanelOpen] = useState(false);
       const [theme, setTheme] = useState('simple');
 
@@ -154,7 +157,9 @@
       
       const [todos, setTodos] = useState([]);         
       const [events, setEvents] = useState([]);       
-      const [shoppings, setShoppings] = useState([]); 
+      const [shoppings, setShoppings] = useState([]);
+      const [customIcons, setCustomIcons] = useState([]);
+      const [iconLibraryMessage, setIconLibraryMessage] = useState(''); 
 
       const [trash, setTrash] = useState([]);
       const [memos, setMemos] = useState([]); 
@@ -187,6 +192,7 @@
       const [eventWho, setEventWho] = useState('');
       const [eventIcon, setEventIcon] = useState('🎉');
       const [eventDate, setEventDate] = useState(realTodayStr);
+      const [eventDetail, setEventDetail] = useState('');
 
       const [shopName, setShopName] = useState('');
       const [shopHasDate, setShopHasDate] = useState(true);
@@ -232,6 +238,7 @@
                     if (data.todos) setTodos(data.todos);
                     if (data.events) setEvents(data.events);
                     if (data.shoppings) setShoppings(data.shoppings);
+                    if (Array.isArray(data.customIcons)) setCustomIcons(data.customIcons);
                     if (data.trash) setTrash(data.trash);
                     if (data.memos) setMemos(data.memos);
                     if (data.locationCode) setLocationCode(data.locationCode);
@@ -251,6 +258,7 @@
                       todos: [],
                       events: [],
                       shoppings: [],
+                      customIcons: [],
                       trash: [],
                       memos: [],
                       locationCode: '230000',
@@ -300,7 +308,7 @@
         const docRef = doc(db, "users", currentUser.uid);
         
         const payload = {
-          lists, selectedListId, todos, events, shoppings, trash, memos, locationCode,
+          lists, selectedListId, todos, events, shoppings, customIcons, trash, memos, locationCode,
           theme, workHours, defaultWorkStart, defaultWorkEnd, payday, paydayAdjustment, holidays,
           memberNames, essentialNoticeDays, ...overrides
         };
@@ -432,6 +440,29 @@
         saveUserDataToFirebase({ defaultWorkStart: start, defaultWorkEnd: end });
       };
 
+      const addCustomIcon = (rawIcon) => {
+        const icon = (rawIcon || '').trim();
+        if (!icon) {
+          setIconLibraryMessage('先にアイコンを入力してください');
+          return;
+        }
+        if ([...ICON_PRESETS, ...EVENT_ICON_PRESETS].includes(icon) || customIcons.includes(icon)) {
+          setIconLibraryMessage('このアイコンはすでに登録されています');
+          return;
+        }
+        const next = [...customIcons, icon];
+        setCustomIcons(next);
+        saveUserDataToFirebase({ customIcons: next });
+        setIconLibraryMessage('アイコンを登録しました');
+      };
+
+      const removeCustomIcon = (icon) => {
+        const next = customIcons.filter(item => item !== icon);
+        setCustomIcons(next);
+        saveUserDataToFirebase({ customIcons: next });
+        setIconLibraryMessage('選択肢から削除しました（登録済みの予定・タスクの表示は変わりません）');
+      };
+
       const handleSaveTodo = (e) => {
         e.preventDefault();
         if (!todoTitle.trim()) return;
@@ -464,7 +495,8 @@
           title: titleFinal,
           who: eventWho.trim(),
           icon: eventIcon || '🎉',
-          date: eventDate
+          date: eventDate,
+          detail: eventDetail.trim()
         };
         if (editingItem) {
           next = events.map(ev => ev.id === editingItem.id ? { ...ev, ...payload } : ev);
@@ -549,12 +581,14 @@
             setEventWho(item.who || '');
             setEventIcon(item.icon || '🎉');
             setEventDate(item.date || viewingDateStr);
+            setEventDetail(item.detail || '');
           } else {
             setEventTypePreset('休日');
             setEventCustomTitle('');
             setEventWho('');
             setEventIcon('🎉');
             setEventDate(viewingDateStr);
+            setEventDetail('');
           }
         } else if (type === 'shopping') {
           setShopName(item ? item.name : '');
@@ -751,6 +785,7 @@
 
           <div className="bg-transparent border-b border-black/5 px-4 py-1.5 flex items-center justify-start gap-1.5 overflow-x-auto">
             <button onClick={() => setActiveTab('today')} className={`px-3 py-1 font-bold text-xs whitespace-nowrap transition hover-scale ${activeTab === 'today' ? themeStyles.activeTabBg : 'opacity-70 hover:opacity-100 hover:bg-black/5 rounded-lg'}`}>☀️ 本日・日めくり</button>
+            <button onClick={() => { setActiveTab('eventCalendar'); setEventCalendarMonth(new Date(Number(selectedEventCalendarDate.slice(0,4)), Number(selectedEventCalendarDate.slice(5,7))-1, 1)); }} className={`px-3 py-1 font-bold text-xs whitespace-nowrap transition hover-scale ${activeTab === 'eventCalendar' ? themeStyles.activeTabBg : 'opacity-70 hover:opacity-100 hover:bg-black/5 rounded-lg'}`}>🎉 イベントカレンダー</button>
             <button onClick={() => setActiveTab('memos')} className={`px-3 py-1 font-bold text-xs whitespace-nowrap transition hover-scale ${activeTab === 'memos' ? themeStyles.activeTabBg : 'opacity-70 hover:opacity-100 hover:bg-black/5 rounded-lg'}`}>📌 メモ</button>
           </div>
 
@@ -931,6 +966,88 @@
 
               </div>
             )}
+
+            {activeTab === 'eventCalendar' && (() => {
+              const ey = eventCalendarMonth.getFullYear();
+              const em = eventCalendarMonth.getMonth();
+              const firstWeekday = new Date(ey, em, 1).getDay();
+              const daysInMonth = new Date(ey, em + 1, 0).getDate();
+              const monthDays = Array.from({ length: firstWeekday }, () => null).concat(
+                Array.from({ length: daysInMonth }, (_, i) => {
+                  const day = i + 1;
+                  return { day, dateStr: `${ey}-${String(em + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}` };
+                })
+              );
+              while (monthDays.length % 7) monthDays.push(null);
+              const selectedEvents = currentListEvents.filter(ev => ev.date === selectedEventCalendarDate).sort((a,b) => (a.title || '').localeCompare(b.title || '', 'ja'));
+              const daysUntil = (dateStr) => {
+                if (!dateStr) return null;
+                const [y,m,d] = dateStr.split('-').map(Number);
+                const target = new Date(y, m - 1, d);
+                const now = new Date(); now.setHours(0,0,0,0);
+                return Math.round((target - now) / 86400000);
+              };
+              const selectedDelta = daysUntil(selectedEventCalendarDate);
+              const selectedDateObj = new Date(`${selectedEventCalendarDate}T12:00:00`);
+              return (
+                <div className="space-y-3 animate-modal">
+                  <section className="bg-white border border-purple-100 rounded-2xl overflow-hidden shadow-sm">
+                    <div className="flex items-center justify-between gap-2 px-3 py-3 bg-purple-50 border-b border-purple-100">
+                      <div><div className="text-sm font-black text-purple-950">🎉 イベントカレンダー</div><div className="text-[10px] text-purple-700 mt-0.5">登録したイベントを日付から確認できます</div></div>
+                      <button onClick={() => { setViewingDateStr(selectedEventCalendarDate); openModal('event'); setEventDate(selectedEventCalendarDate); }} className="bg-purple-600 text-white px-2.5 py-1.5 rounded-lg text-[10px] font-bold shrink-0">＋イベント</button>
+                    </div>
+                    <div className="flex items-center justify-between px-3 py-2 border-b">
+                      <button onClick={() => setEventCalendarMonth(new Date(ey, em - 1, 1))} className="px-3 py-1.5 border rounded-lg text-xs font-bold">◀ 前月</button>
+                      <div className="text-sm font-black">{ey}年 {em + 1}月</div>
+                      <button onClick={() => setEventCalendarMonth(new Date(ey, em + 1, 1))} className="px-3 py-1.5 border rounded-lg text-xs font-bold">次月 ▶</button>
+                    </div>
+                    <div className="grid grid-cols-7 text-center text-[10px] font-bold py-2 bg-slate-50 border-b">
+                      {['日','月','火','水','木','金','土'].map((d,i)=><div key={d} className={i===0?'text-rose-500':i===6?'text-blue-500':'text-slate-500'}>{d}</div>)}
+                    </div>
+                    <div className="grid grid-cols-7 gap-px bg-slate-200">
+                      {monthDays.map((day,idx) => {
+                        if (!day) return <div key={`blank-${idx}`} className="bg-slate-50 min-h-[62px]" />;
+                        const dayEvents = currentListEvents.filter(ev => ev.date === day.dateStr);
+                        const isToday = day.dateStr === realTodayStr;
+                        const isSelected = day.dateStr === selectedEventCalendarDate;
+                        return <button key={day.dateStr} onClick={() => setSelectedEventCalendarDate(day.dateStr)} className={`min-w-0 min-h-[62px] p-1 text-left flex flex-col items-stretch gap-0.5 ${isSelected?'bg-purple-100 ring-2 ring-inset ring-purple-500':isToday?'bg-blue-50':'bg-white hover:bg-purple-50'}`}>
+                          <span className={`text-[11px] font-black self-start rounded px-1 ${isToday?'bg-blue-600 text-white':'text-slate-700'}`}>{day.day}</span>
+                          {dayEvents.slice(0,2).map(ev=><span key={ev.id} className="block w-full truncate text-[8px] leading-3 px-1 rounded bg-purple-100 text-purple-800 font-bold">{ev.icon} {ev.title}</span>)}
+                          {dayEvents.length>2 && <span className="text-[8px] text-purple-700">+{dayEvents.length-2}件</span>}
+                        </button>;
+                      })}
+                    </div>
+                  </section>
+                  <section className="bg-white border border-slate-200 rounded-2xl p-3 space-y-2 shadow-sm">
+                    <div className="flex items-start justify-between gap-2 border-b pb-2">
+                      <div><div className="font-black text-sm text-slate-900">{selectedDateObj.getMonth()+1}月{selectedDateObj.getDate()}日（{['日','月','火','水','木','金','土'][selectedDateObj.getDay()]}）</div><div className="text-[10px] text-slate-500 mt-0.5">{selectedDelta === 0 ? '今日' : selectedDelta > 0 ? `今日から ${selectedDelta} 日後` : `${Math.abs(selectedDelta)} 日前`}</div></div>
+                      <div className="flex gap-1 shrink-0"><button onClick={() => {setViewingDateStr(selectedEventCalendarDate);setActiveTab('today');}} className="px-2 py-1.5 border rounded-lg text-[10px] font-bold">日めくりへ</button><button onClick={() => {setViewingDateStr(selectedEventCalendarDate);openModal('event');setEventDate(selectedEventCalendarDate);}} className="px-2 py-1.5 bg-purple-600 text-white rounded-lg text-[10px] font-bold">＋追加</button></div>
+                    </div>
+                    {selectedEvents.length===0 ? <div className="text-center text-slate-400 text-xs py-5">この日のイベントはありません</div> : selectedEvents.map(ev=>{
+                      const delta = daysUntil(ev.date);
+                      return <div key={ev.id} className="border border-purple-100 bg-purple-50/60 rounded-xl p-2.5 space-y-1.5">
+                        <div className="flex items-start gap-2">
+                          <span className="text-xl">{ev.icon || '🎉'}</span>
+                          <div className="flex-1 min-w-0"><div className="font-extrabold text-xs text-purple-950 break-words">{ev.title}{ev.who ? <span className="font-normal text-purple-700 ml-1">({ev.who})</span> : null}</div><div className="text-[10px] font-bold text-purple-700 mt-0.5">{delta===0?'🎯 今日のイベント':delta>0?`あと ${delta} 日`:`${Math.abs(delta)} 日前のイベント`}</div></div>
+                          <div className="flex gap-1 shrink-0"><button onClick={() => {setViewingDateStr(ev.date);openModal('event',ev);}} className="p-1 text-purple-700" aria-label="編集"><i data-lucide="edit-3" className="w-3.5 h-3.5"></i></button><button onClick={() => deleteEvent(ev.id)} className="p-1 text-rose-500" aria-label="削除"><i data-lucide="trash-2" className="w-3.5 h-3.5"></i></button></div>
+                        </div>
+                        {ev.detail ? <div className="text-[11px] text-slate-700 bg-white/80 border border-purple-100 rounded-lg px-2 py-1.5 whitespace-pre-wrap break-words"><span className="font-bold text-slate-500">準備・備考：</span>{ev.detail}</div> : <div className="text-[10px] text-slate-400">準備・備考は未記入です（編集から追加できます）</div>}
+                      </div>;
+                    })}
+                  </section>
+                  <section className="bg-white border border-slate-200 rounded-2xl p-3 shadow-sm">
+                    <div className="font-black text-xs mb-2">📌 今後のイベント</div>
+                    {currentListEvents.filter(ev => ev.date && ev.date >= realTodayStr).sort((a,b)=>a.date.localeCompare(b.date)).slice(0,8).map(ev=>{
+                      const delta = daysUntil(ev.date);
+                      return <button key={ev.id} onClick={() => {setSelectedEventCalendarDate(ev.date);setEventCalendarMonth(new Date(Number(ev.date.slice(0,4)),Number(ev.date.slice(5,7))-1,1));}} className="w-full flex items-center gap-2 py-2 border-b last:border-0 text-left">
+                        <div className="w-12 shrink-0 text-center"><div className="text-[9px] text-slate-400">{ev.date.slice(0,4)}</div><div className="text-xs font-black text-purple-800">{Number(ev.date.slice(5,7))}/{Number(ev.date.slice(8,10))}</div></div><span className="text-base">{ev.icon || '🎉'}</span><span className="flex-1 min-w-0 text-xs font-bold truncate">{ev.title}</span><span className="text-[10px] text-purple-700 font-bold shrink-0">{delta===0?'今日':`あと${delta}日`}</span>
+                      </button>;
+                    })}
+                    {currentListEvents.filter(ev => ev.date && ev.date >= realTodayStr).length===0 && <div className="text-[10px] text-slate-400">今後のイベントは登録されていません</div>}
+                  </section>
+                </div>
+              );
+            })()}
 
             {activeTab === 'memos' && (
               <div className="space-y-2.5 animate-modal">
@@ -1176,11 +1293,18 @@
                   <div>
                     <label className="block text-[10px] opacity-60 font-bold mb-1">アイコン (選択 or 直接入力)</label>
                     <div className="flex gap-1.5 mb-1.5 flex-wrap">
-                      {ICON_PRESETS.map(ic => (
-                        <button key={ic} type="button" onClick={() => setTodoIcon(ic)} className={`w-8 h-8 rounded-xl text-sm flex items-center justify-center border ${todoIcon === ic ? 'bg-blue-600 text-white border-blue-600' : 'bg-slate-50'}`}>{ic}</button>
+                      {[...ICON_PRESETS, ...customIcons].map(ic => (
+                        <span key={ic} className="relative inline-flex">
+                          <button key={ic} type="button" onClick={() => { setTodoIcon(ic); setIconLibraryMessage(''); }} className={`w-8 h-8 rounded-xl text-sm flex items-center justify-center border ${todoIcon === ic ? 'bg-blue-600 text-white border-blue-600' : 'bg-slate-50'}`}>{ic}</button>
+                          {customIcons.includes(ic) && <button type="button" onClick={() => removeCustomIcon(ic)} title="登録アイコンを削除" className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-rose-500 text-white text-[10px] leading-none">×</button>}
+                        </span>
                       ))}
                     </div>
-                    <input type="text" value={todoIcon} onChange={e => setTodoIcon(e.target.value)} className="w-full px-3 py-1.5 border rounded-xl text-xs" placeholder="直接入力" maxLength={2} />
+                    <div className="flex gap-1.5">
+                      <input type="text" value={todoIcon} onChange={e => { setTodoIcon(e.target.value); setIconLibraryMessage(''); }} className="min-w-0 flex-1 px-3 py-1.5 border rounded-xl text-xs" placeholder="絵文字を直接入力" maxLength={8} />
+                      <button type="button" onClick={() => addCustomIcon(todoIcon)} className="px-2.5 py-1.5 rounded-xl bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-bold whitespace-nowrap">＋登録</button>
+                    </div>
+                    {iconLibraryMessage && <p className="text-[10px] text-slate-500 mt-1">{iconLibraryMessage}</p>}
                   </div>
                   <div>
                     <label className="block text-[10px] opacity-60 font-bold mb-1">日付</label>
@@ -1236,15 +1360,26 @@
                   <div>
                     <label className="block text-[10px] opacity-60 font-bold mb-1">アイコン</label>
                     <div className="flex gap-1.5 mb-1.5 flex-wrap">
-                      {['🎉', '🎂', '🎊', '🎁', '🥂', '✈️', '🚗', '⭐', '🎈'].map(ic => (
-                        <button key={ic} type="button" onClick={() => setEventIcon(ic)} className={`w-8 h-8 rounded-xl text-sm flex items-center justify-center border ${eventIcon === ic ? 'bg-purple-600 text-white border-purple-600' : 'bg-slate-50'}`}>{ic}</button>
+                      {[...EVENT_ICON_PRESETS, ...customIcons.filter(ic => !EVENT_ICON_PRESETS.includes(ic))].map(ic => (
+                        <span key={ic} className="relative inline-flex">
+                          <button type="button" onClick={() => { setEventIcon(ic); setIconLibraryMessage(''); }} className={`w-8 h-8 rounded-xl text-sm flex items-center justify-center border ${eventIcon === ic ? 'bg-purple-600 text-white border-purple-600' : 'bg-slate-50'}`}>{ic}</button>
+                          {customIcons.includes(ic) && <button type="button" onClick={() => removeCustomIcon(ic)} title="登録アイコンを削除" className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-rose-500 text-white text-[10px] leading-none">×</button>}
+                        </span>
                       ))}
                     </div>
-                    <input type="text" value={eventIcon} onChange={e => setEventIcon(e.target.value)} className="w-full px-3 py-1.5 border rounded-xl text-xs" placeholder="直接入力" maxLength={2} />
+                    <div className="flex gap-1.5">
+                      <input type="text" value={eventIcon} onChange={e => { setEventIcon(e.target.value); setIconLibraryMessage(''); }} className="min-w-0 flex-1 px-3 py-1.5 border rounded-xl text-xs" placeholder="絵文字を直接入力" maxLength={8} />
+                      <button type="button" onClick={() => addCustomIcon(eventIcon)} className="px-2.5 py-1.5 rounded-xl bg-purple-50 text-purple-700 border border-purple-200 text-[10px] font-bold whitespace-nowrap">＋登録</button>
+                    </div>
+                    {iconLibraryMessage && <p className="text-[10px] text-slate-500 mt-1">{iconLibraryMessage}</p>}
                   </div>
                   <div>
                     <label className="block text-[10px] opacity-60 font-bold mb-1">日付</label>
                     <input type="date" value={eventDate} onChange={e => setEventDate(e.target.value)} className="w-full px-3 py-2 border rounded-xl text-xs font-bold" required />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] opacity-60 font-bold mb-1">準備するもの・備考</label>
+                    <textarea value={eventDetail} onChange={e => setEventDetail(e.target.value)} className="w-full px-3 py-2 border rounded-xl text-xs h-20 resize-y" placeholder="例：プレゼント、予約確認、持ち物、事前に済ませること..." />
                   </div>
                   <div className="flex justify-end gap-2 pt-2 border-t">
                     <button type="button" onClick={closeModal} className="px-3 py-1.5 border rounded-xl text-xs font-bold">キャンセル</button>
