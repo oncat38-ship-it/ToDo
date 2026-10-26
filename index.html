@@ -373,6 +373,7 @@
         }
       };
 
+      // 仕事時間の一括保存（既存の登録内容が次回も保持される）
       const handleSaveTableBulkWorkHours = (e) => {
         e.preventDefault();
         const nextHours = { ...workHours };
@@ -383,7 +384,7 @@
           if (startVal && endVal) {
             nextHours[dateStr] = { start: startVal, end: endVal };
           } else {
-            delete nextHours[dateStr];
+            delete nextHours[dateStr]; // 未定や休日の場合は保存データを削除してクリア
           }
         });
         setWorkHours(nextHours);
@@ -399,6 +400,7 @@
         for (let d = 1; d <= daysInMonth; d++) {
           const dateStr = `${targetYear}-${String(targetMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
           const existing = workHours[dateStr];
+          // 既に登録されているデータがあればそれを優先して読み込む
           rows[dateStr] = {
             start: existing ? existing.start : defaultWorkStart,
             end: existing ? existing.end : defaultWorkEnd
@@ -414,7 +416,6 @@
         saveUserDataToFirebase({ defaultWorkStart: start, defaultWorkEnd: end });
       };
 
-      // データ保存・編集・削除
       const handleSaveTodo = (e) => {
         e.preventDefault();
         if (!todoTitle.trim()) return;
@@ -991,7 +992,7 @@
             </div>
           )}
 
-          {/* 一括勤務時間編集モーダル */}
+          {/* 一括勤務時間編集モーダル：隙間を極限まで詰め、「未定」「休み」をスマートに配置 */}
           {isBulkWorkModalOpen && (
             <div className="fixed inset-0 bg-slate-950/70 flex items-center justify-center p-2 z-50">
               <div className="bg-white rounded-3xl w-full max-w-md p-3.5 shadow-2xl border space-y-2.5 animate-modal flex flex-col max-h-[92vh]">
@@ -1001,7 +1002,7 @@
                 </div>
 
                 <div className="text-[10px] opacity-70 shrink-0">
-                  💡 テンプレが入力されています。「お休み」で空白にします。
+                  💡 「未定」や「休み」を押すと空欄になります。保存した内容は次回も引き継がれます。
                 </div>
 
                 <form onSubmit={handleSaveTableBulkWorkHours} className="space-y-2.5 flex-1 flex flex-col min-h-0">
@@ -1013,14 +1014,16 @@
                       const isWeekend = dObj.getDay() === 0 || dObj.getDay() === 6;
 
                       return (
-                        <div key={dateStr} className={`flex items-center justify-between gap-1 px-2 py-1.5 rounded-xl ${isWeekend ? 'bg-slate-50' : 'bg-white'}`}>
-                          <div className="flex items-center shrink-0 w-12">
+                        <div key={dateStr} className={`flex items-center justify-between gap-1 px-2 py-1 rounded-xl ${isWeekend ? 'bg-slate-50' : 'bg-white'}`}>
+                          {/* 日付（幅をコンパクトに固定） */}
+                          <div className="flex items-center shrink-0 w-10">
                             <span className={`text-[11px] font-bold ${dObj.getDay() === 0 ? 'text-rose-500' : dObj.getDay() === 6 ? 'text-blue-500' : 'text-slate-800'}`}>
                               {dObj.getDate()}({dayOfWeek})
                             </span>
                           </div>
 
-                          <div className="flex items-center gap-1 flex-1 justify-end">
+                          {/* 時間入力と「未定」「休み」ボタンをぎゅっと配置 */}
+                          <div className="flex items-center gap-0.5 flex-1 justify-end">
                             <input 
                               type="time" 
                               value={row.start} 
@@ -1029,9 +1032,9 @@
                                 next[dateStr].start = e.target.value;
                                 setBulkEditRows(next);
                               }} 
-                              className="px-1 py-1 border rounded-lg text-[10px] font-bold bg-white text-center w-20 shrink-0" 
+                              className="px-1 py-1 border rounded-lg text-[10px] font-bold bg-white text-center w-16 shrink-0" 
                             />
-                            <span className="opacity-40 text-[10px] font-bold">〜</span>
+                            <span className="opacity-40 text-[9px]">〜</span>
                             <input 
                               type="time" 
                               value={row.end} 
@@ -1040,7 +1043,7 @@
                                 next[dateStr].end = e.target.value;
                                 setBulkEditRows(next);
                               }} 
-                              className="px-1 py-1 border rounded-lg text-[10px] font-bold bg-white text-center w-20 shrink-0" 
+                              className="px-1 py-1 border rounded-lg text-[10px] font-bold bg-white text-center w-16 shrink-0" 
                             />
                             <button 
                               type="button" 
@@ -1050,10 +1053,23 @@
                                 next[dateStr].end = '';
                                 setBulkEditRows(next);
                               }}
-                              className="bg-amber-500/15 hover:bg-amber-500/25 text-amber-800 px-2 py-1 rounded-lg text-[10px] font-bold shrink-0 transition"
-                              title="お休み"
+                              className="bg-slate-200 hover:bg-slate-300 text-slate-700 px-1.5 py-1 rounded-md text-[9px] font-bold shrink-0 transition"
+                              title="未定"
                             >
-                              お休み
+                              未定
+                            </button>
+                            <button 
+                              type="button" 
+                              onClick={() => {
+                                const next = { ...bulkEditRows };
+                                next[dateStr].start = '';
+                                next[dateStr].end = '';
+                                setBulkEditRows(next);
+                              }}
+                              className="bg-amber-500/15 hover:bg-amber-500/25 text-amber-800 px-1.5 py-1 rounded-md text-[9px] font-bold shrink-0 transition"
+                              title="休み"
+                            >
+                              休み
                             </button>
                           </div>
                         </div>
