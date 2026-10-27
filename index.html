@@ -214,6 +214,8 @@
       const [feedbackMsg, setFeedbackMsg] = useState('');
 
       const [newQuickMemo, setNewQuickMemo] = useState('');
+      const [editingMemoId, setEditingMemoId] = useState(null);
+      const [editingMemoText, setEditingMemoText] = useState('');
       const [newListName, setNewListName] = useState('');
       const [currentDate, setCurrentDate] = useState(new Date());
       const [weather, setWeather] = useState({ text: '読み込み中...', icon: '🌤️' });
@@ -605,10 +607,20 @@
 
       const handleAddMemo = (targetDate = null) => {
         if (!newQuickMemo.trim()) return;
-        const nextMemos = [{ id: Date.now().toString(), text: newQuickMemo.trim(), date: targetDate || '', completed: false }, ...memos];
+        const author = currentUser?.email ? currentUser.email.split('@')[0] : 'メンバー';
+        const nextMemos = [{ id: Date.now().toString(), text: newQuickMemo.trim(), date: targetDate || '', completed: false, author, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }, ...memos];
         setMemos(nextMemos);
         saveUserDataToFirebase({ memos: nextMemos });
         setNewQuickMemo('');
+      };
+
+      const saveMemoEdit = (id) => {
+        if (!editingMemoText.trim()) return;
+        const nextMemos = memos.map(m => m.id === id ? { ...m, text: editingMemoText.trim(), updatedAt: new Date().toISOString() } : m);
+        setMemos(nextMemos);
+        saveUserDataToFirebase({ memos: nextMemos });
+        setEditingMemoId(null);
+        setEditingMemoText('');
       };
 
       const toggleMemoComplete = (id) => {
@@ -621,6 +633,7 @@
         const nextMemos = memos.filter(m => m.id !== id);
         setMemos(nextMemos);
         saveUserDataToFirebase({ memos: nextMemos });
+        if (editingMemoId === id) { setEditingMemoId(null); setEditingMemoText(''); }
       };
 
       const handleCreateList = (e) => {
@@ -693,7 +706,8 @@
       const viewingEvents = currentListEvents.filter(e => e.date === viewingDateStr);
       const viewingShoppings = currentListShoppings.filter(s => !s.date || s.date === viewingDateStr);
       const undatedShoppings = currentListShoppings.filter(s => !s.date);
-      const viewingMemos = memos.filter(m => !m.date || m.date === viewingDateStr);
+      const todaysShoppings = currentListShoppings.filter(s => s.date === realTodayStr);
+      const viewingMemos = memos; // 伝言板は日付に関係なく全件表示
       const viewingWorkHours = workHours[viewingDateStr];
 
       const viewingDateObj = new Date(viewingDateStr);
@@ -777,9 +791,9 @@
             </div>
 
             <div className="flex items-center gap-2 shrink-0">
-              <button onClick={() => openModal('todo')} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 ${themeStyles.primaryBtn}`}>＋やること</button>
-              <button onClick={() => openModal('event')} className="px-3 py-1.5 rounded-lg font-bold text-xs text-purple-700 bg-purple-100 hover:bg-purple-200 transition border border-purple-200 hover-scale">＋イベント</button>
-              <button onClick={() => window.firebaseApp.signOut(window.firebaseApp.auth)} className="opacity-60 hover:opacity-100 p-1 transition ml-1 hover-scale"><i data-lucide="log-out" className="w-4 h-4"></i></button>
+              <button onClick={() => openModal('todo')} className={`w-8 h-8 rounded-lg text-xs font-bold transition flex items-center justify-center gap-0.5 ${themeStyles.primaryBtn}`} title="やることを追加" aria-label="やることを追加"><i data-lucide="list-check" className="w-4 h-4"></i><i data-lucide="plus" className="w-3 h-3"></i></button>
+              <button onClick={() => openModal('event')} className="w-8 h-8 rounded-lg font-bold text-purple-700 bg-purple-100 hover:bg-purple-200 transition border border-purple-200 hover-scale flex items-center justify-center" title="イベントを追加" aria-label="イベントを追加"><i data-lucide="calendar-plus" className="w-4 h-4"></i></button>
+              <button onClick={() => window.firebaseApp.signOut(window.firebaseApp.auth)} className="opacity-60 hover:opacity-100 p-1 transition ml-1 hover-scale" title="ログアウト" aria-label="ログアウト"><i data-lucide="log-out" className="w-4 h-4"></i></button>
             </div>
           </header>
 
@@ -794,12 +808,24 @@
             {isShoppingPanelOpen && (
               <div className="mb-2 rounded-xl border border-emerald-200 bg-white shadow-xl overflow-hidden">
                 <div className="flex items-center justify-between gap-2 px-2.5 py-2 bg-emerald-50 border-b border-emerald-100">
-                  <div className="font-extrabold text-xs text-emerald-950">🛒 日付未定の買い物</div>
-                  <button onClick={() => openModal('shopping')} className="bg-emerald-600 text-white px-2 py-1 rounded-lg text-[10px] font-bold shrink-0">＋追加</button>
+                  <div className="font-extrabold text-xs text-emerald-950">🛒 買い物リスト</div>
+                  <button onClick={() => { openModal('shopping'); setShopHasDate(true); setShopDate(realTodayStr); }} className="bg-emerald-600 text-white px-2 py-1 rounded-lg text-[10px] font-bold shrink-0">＋追加</button>
                 </div>
-                <div className="max-h-[45vh] overflow-y-auto p-1.5 space-y-1">
+                <div className="max-h-[55vh] overflow-y-auto p-1.5 space-y-1.5">
+                  <div className="px-1 pt-1 text-[10px] font-extrabold text-emerald-800">📅 本日の買い物 ({todaysShoppings.filter(s => !s.completed).length}件)</div>
+                  {todaysShoppings.length === 0 ? (
+                    <div className="text-center text-slate-400 text-[10px] py-2">本日の買い物はありません</div>
+                  ) : todaysShoppings.map(shop => (
+                    <div key={shop.id} className={`border rounded-lg px-2 py-1 flex items-center gap-1.5 ${shop.completed ? 'bg-slate-50 opacity-50' : 'bg-white border-emerald-100'}`}>
+                      <input type="checkbox" checked={!!shop.completed} onChange={() => toggleShoppingComplete(shop.id)} className="w-3.5 h-3.5 text-emerald-600 rounded cursor-pointer shrink-0" />
+                      <div className="flex-1 min-w-0"><div className={`font-bold text-[11px] leading-4 break-words ${shop.completed ? 'line-through' : ''}`}>{shop.name}</div>{shop.detail && <div className="text-[9px] text-slate-400 truncate">{shop.detail}</div>}</div>
+                      <button onClick={() => openModal('shopping', shop)} className="text-slate-400 p-0.5" aria-label="買い物を編集"><i data-lucide="edit-3" className="w-3 h-3"></i></button>
+                      <button onClick={() => deleteShopping(shop.id)} className="text-rose-500 p-0.5" aria-label="買い物を削除"><i data-lucide="trash-2" className="w-3 h-3"></i></button>
+                    </div>
+                  ))}
+                  <div className="px-1 pt-2 border-t border-emerald-100 text-[10px] font-extrabold text-emerald-800">🛒 日付未定 ({undatedShoppings.filter(s => !s.completed).length}件)</div>
                   {undatedShoppings.length === 0 ? (
-                    <div className="text-center text-slate-400 text-[10px] py-4">日付未定の買い物はありません</div>
+                    <div className="text-center text-slate-400 text-[10px] py-2">日付未定の買い物はありません</div>
                   ) : undatedShoppings.map(shop => (
                     <div key={shop.id} className={`border rounded-lg px-2 py-1 flex items-center gap-1.5 ${shop.completed ? 'bg-slate-50 opacity-50' : 'bg-white border-emerald-100'}`}>
                       <input type="checkbox" checked={!!shop.completed} onChange={() => toggleShoppingComplete(shop.id)} className="w-3.5 h-3.5 text-emerald-600 rounded cursor-pointer shrink-0" />
@@ -812,7 +838,7 @@
               </div>
             )}
             <button onClick={() => setIsShoppingPanelOpen(v => !v)} aria-expanded={isShoppingPanelOpen} className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 shadow-lg font-bold text-xs transition active:scale-95">
-              <span className="text-base">🛒</span><span>買い物</span><span className="rounded-full bg-white/20 px-1.5 py-0.5 text-[10px]">{undatedShoppings.filter(s => !s.completed).length}</span><span className="text-[10px]">{isShoppingPanelOpen ? '▼閉じる' : '▲開く'}</span>
+              <span className="text-base">🛒</span><span>買い物</span><span className="rounded-full bg-white/20 px-1.5 py-0.5 text-[10px]">{undatedShoppings.filter(s => !s.completed).length + todaysShoppings.filter(s => !s.completed).length}</span><span className="text-[10px]">{isShoppingPanelOpen ? '▼閉じる' : '▲開く'}</span>
             </button>
           </div>
 
@@ -1050,26 +1076,51 @@
             })()}
 
             {activeTab === 'memos' && (
-              <div className="space-y-2.5 animate-modal">
-                <div className="p-3 space-y-2 bg-white border rounded-xl">
-                  <span className="font-extrabold text-xs">📌 自由メモ</span>
-                  <div className="flex gap-2">
-                    <input type="text" placeholder="メモを入力..." value={newQuickMemo} onChange={(e) => setNewQuickMemo(e.target.value)} className="flex-1 px-3 py-1.5 border rounded-lg text-xs outline-none" onKeyDown={(e) => { if (e.key === 'Enter') handleAddMemo(viewingDateStr); }} />
-                    <button onClick={() => handleAddMemo(viewingDateStr)} className="bg-slate-900 text-white px-3 py-1.5 rounded-lg text-xs font-bold shrink-0">追加</button>
+              <div className="space-y-3 animate-modal">
+                <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3 sm:p-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <div className="w-8 h-8 rounded-full bg-amber-200 text-amber-900 flex items-center justify-center"><i data-lucide="messages-square" className="w-4 h-4"></i></div>
+                    <div><div className="font-black text-sm text-amber-950">みんなの伝言板</div><div className="text-[10px] text-amber-800">一緒に使う人や、未来の自分への書き残し</div></div>
+                  </div>
+                  <textarea placeholder="伝言や忘れたくないことを書く..." value={newQuickMemo} onChange={(e) => setNewQuickMemo(e.target.value)} className="w-full mt-2 px-3 py-2.5 border border-amber-200 bg-white rounded-xl text-xs outline-none focus:ring-2 focus:ring-amber-200 min-h-[84px] resize-y" />
+                  <div className="flex items-center justify-between gap-2 mt-2">
+                    <span className="text-[10px] text-amber-800">{viewingDateStr} のメモとして保存</span>
+                    <button onClick={() => handleAddMemo(viewingDateStr)} disabled={!newQuickMemo.trim()} className="bg-amber-700 hover:bg-amber-800 disabled:opacity-40 text-white px-4 py-2 rounded-xl text-xs font-bold shrink-0 flex items-center gap-1"><i data-lucide="send" className="w-3.5 h-3.5"></i>伝言を残す</button>
                   </div>
                 </div>
 
-                <div className="bg-white border border-slate-200/80 rounded-xl overflow-hidden divide-y divide-slate-100 shadow-2xs">
+                <div className="flex items-center justify-between px-1">
+                  <div className="font-extrabold text-xs text-slate-700">💬 伝言・メモ</div>
+                  <div className="text-[10px] text-slate-400">{viewingMemos.length}件</div>
+                </div>
+                <div className="space-y-2">
                   {viewingMemos.length === 0 ? (
-                    <div className="p-6 text-center opacity-40 text-xs">メモはありません</div>
+                    <div className="bg-white border border-dashed rounded-2xl p-8 text-center text-slate-400 text-xs"><i data-lucide="message-circle" className="w-6 h-6 mx-auto mb-2 opacity-50"></i>まだ伝言はありません。最初のメモを残してみましょう。</div>
                   ) : (
-                    viewingMemos.map(memo => (
-                      <div key={memo.id} className="px-3 py-2 flex items-center justify-between text-xs">
-                        <div className="flex items-center gap-2 flex-1 min-w-0">
-                          <input type="checkbox" checked={memo.completed} onChange={() => toggleMemoComplete(memo.id)} className="w-3.5 h-3.5 text-amber-600 rounded cursor-pointer shrink-0" />
-                          <span className={`font-medium truncate ${memo.completed ? 'line-through opacity-40' : ''}`}>{memo.text}</span>
+                    viewingMemos.map((memo, index) => (
+                      <div key={memo.id} className={`bg-white border rounded-2xl p-3 shadow-sm ${memo.completed ? 'opacity-60' : ''}`}>
+                        <div className="flex items-start gap-2.5">
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-black shrink-0 ${index % 2 === 0 ? 'bg-sky-100 text-sky-800' : 'bg-violet-100 text-violet-800'}`}>{(memo.author || '？').slice(0,1).toUpperCase()}</div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between gap-2 mb-1">
+                              <div className="font-bold text-[11px] text-slate-700">{memo.author || '以前のメモ'}</div>
+                              <div className="text-[9px] text-slate-400">{memo.createdAt ? new Date(memo.createdAt).toLocaleString('ja-JP', {month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}) : (memo.date || '')}{memo.updatedAt && memo.createdAt && memo.updatedAt !== memo.createdAt ? ' · 編集済み' : ''}</div>
+                            </div>
+                            {editingMemoId === memo.id ? (
+                              <div className="space-y-2">
+                                <textarea value={editingMemoText} onChange={e => setEditingMemoText(e.target.value)} className="w-full border rounded-xl p-2 text-xs min-h-[80px] outline-none focus:ring-2 focus:ring-amber-200" autoFocus />
+                                <div className="flex justify-end gap-1.5"><button onClick={() => {setEditingMemoId(null);setEditingMemoText('');}} className="px-3 py-1.5 border rounded-lg text-[10px] font-bold">キャンセル</button><button onClick={() => saveMemoEdit(memo.id)} className="px-3 py-1.5 bg-amber-700 text-white rounded-lg text-[10px] font-bold">保存</button></div>
+                              </div>
+                            ) : (
+                              <div className={`text-xs leading-5 whitespace-pre-wrap break-words ${memo.completed ? 'line-through' : 'text-slate-800'}`}>{memo.text}</div>
+                            )}
+                            {editingMemoId !== memo.id && <div className="flex items-center justify-end gap-2 mt-2 pt-2 border-t border-slate-100">
+                              <button onClick={() => toggleMemoComplete(memo.id)} className={`text-[10px] px-2 py-1 rounded-lg ${memo.completed ? 'bg-slate-100 text-slate-500' : 'bg-amber-50 text-amber-800'}`}>{memo.completed ? '未対応に戻す' : '確認済み'}</button>
+                              <button onClick={() => {setEditingMemoId(memo.id);setEditingMemoText(memo.text);}} className="text-slate-500 hover:text-slate-900 p-1" aria-label="伝言を編集" title="編集"><i data-lucide="pencil" className="w-3.5 h-3.5"></i></button>
+                              <button onClick={() => {if(window.confirm('この伝言を削除しますか？')) deleteMemo(memo.id);}} className="text-rose-500 hover:text-rose-700 p-1" aria-label="伝言を削除" title="削除"><i data-lucide="trash-2" className="w-3.5 h-3.5"></i></button>
+                            </div>}
+                          </div>
                         </div>
-                        <button onClick={() => deleteMemo(memo.id)} className="opacity-40 hover:text-rose-500 p-0.5 ml-2"><i data-lucide="x" className="w-3.5 h-3.5"></i></button>
                       </div>
                     ))
                   )}
